@@ -654,9 +654,14 @@ int main(int argc,char **argv) {
         }
         string cmd;
         const auto base=lower(fs::path(compiler).filename().string());
-        if(base=="cl"||base=="cl.exe")cmd=shellQuote(compiler)+" /nologo /std:c++20 /utf-8 /EHsc "+string(optimize==0?"/Od":optimize==1?"/O1":"/O2")+" /Fe:"+shellQuote(output.string())+" "+shellQuote(cpp.string());
+        // Windows cmd.exe may misparse a command starting with a quoted bare
+        // executable (e.g. "cl" /Fe:"C:\\path\\app.exe" ...). Bare compiler
+        // names contain no shell metacharacters, so invoke them directly.
+        const bool safeBareName=std::regex_match(compiler,std::regex(R"([A-Za-z0-9_.+\-]+)"));
+        const string tool=safeBareName?compiler:shellQuote(compiler);
+        if(base=="cl"||base=="cl.exe")cmd=tool+" /nologo /std:c++20 /utf-8 /EHsc "+string(optimize==0?"/Od":optimize==1?"/O1":"/O2")+" /Fe:"+shellQuote(output.string())+" "+shellQuote(cpp.string());
         else {
-            cmd=shellQuote(compiler)+" -std=c++20 -O"+std::to_string(optimize)+" "+shellQuote(cpp.string())+" -o "+shellQuote(output.string());
+            cmd=tool+" -std=c++20 -O"+std::to_string(optimize)+" "+shellQuote(cpp.string())+" -o "+shellQuote(output.string());
 #ifdef _WIN32
             cmd+=" -liphlpapi -lws2_32";
 #else
