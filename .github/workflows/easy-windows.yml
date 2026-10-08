@@ -10,6 +10,19 @@ on:
       - '.github/workflows/easy-windows.yml'
       - 'CMakeLists.txt'
       - 'README.md'
+      - 'src/**'
+      - 'tests/**'
+      - 'examples/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'studio/**'
+      - 'dist/**'
+      - 'src/**'
+      - 'tests/**'
+      - 'examples/**'
+      - '.github/workflows/easy-windows.yml'
+      - 'CMakeLists.txt'
   workflow_dispatch:
     inputs:
       include_model:
