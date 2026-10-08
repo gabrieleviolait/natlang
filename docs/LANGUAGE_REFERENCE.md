@@ -1,4 +1,4 @@
-# NatLang v0.2 language reference
+# NatLang v0.3 language reference
 
 This describes the **implemented**, deliberately restricted language. This is not a promise that arbitrary plain English will compile without the optional model.
 
@@ -148,3 +148,15 @@ Show ping("127.0.0.1")
 ## What is *not* supported in v0.2
 
 Object-oriented classes, exceptions in `.nat`, modules/imports, general networking (beyond IPv4 ICMP discovery), threads as a language feature, GUI, screen/keyboard automation, external libraries, dictionaries, detailed type annotations, array indexing, floating-point financial accuracy guarantees, and literal full free-form English without local LLM normalization. See [roadmap](ROADMAP.md).
+
+## v0.3 — Italian, multilingual aliases and shared IR
+
+NatLang now recognizes a broader Italian/English vocabulary for primary program constructs, plus a partial experimental Spanish/French/German subset. Refer to [MULTILINGUAL.md](MULTILINGUAL.md) for tested examples and exact caveats. **No natural language is understood without limits**. For unconventional phrasing use the local `--llm` or `--llm-all` normalization path, whose correctness depends on the separately supplied model. All supported forms compile through **one IR and C++ backend**; use `--emit-ir` to inspect the statement-level JSON.
+
+## v0.3 — Extended mathematics
+
+Operators `^` and `**` are right-associative, with higher precedence than unary minus. Common verbal operators support IT/EN forms such as `più`, `meno`, `diviso`, `per`, `modulo`, `elevato a`, `plus`, `times`, `divided by`, `to the power of`. Functions include `pow/potenza`, `sqrt/radice`, `cbrt/radice_cubica`, `abs/assoluto`, `round/arrotonda`, `floor/arrotonda_giu`, `ceil/arrotonda_su`, `ln/log`, `log10`, `exp`, `sin/seno`, `cos/coseno`, `tan/tangente`, `asin`, `acos`, `atan`, `atan2`, `factorial/fattoriale`, `percent/percentuale`, `clamp/limita` and `sign/segno`. Constants: `pi`, `euler`. Read [MATH.md](MATH.md) for arities, domains, precision and examples.
+
+### Optimization flag
+
+Native builds use `--opt-level 2` by default; choose `--opt-level 0` for fast debug and test builds, or levels `1` to `3` when supported by the external C++ toolchain. This affects the *generated program*, not the LLM or NatLang parser.

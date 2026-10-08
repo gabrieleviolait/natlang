@@ -50,3 +50,8 @@ Scan network
 `natc --eval "2 plus 2"` produce direttamente `4`. La scansione IP usa ping senza privilegi speciali richiesti dal programma, ma il sistema operativo può limitarlo; l'assenza di risposta ICMP non significa necessariamente host spento. `Scan network` si limita ad alcune sottoreti LAN IPv4 private, con un limite esplicito al numero di host.
 
 Per le istruzioni operative consultare il [README](../README.md), per ciò che il compilatore comprende davvero la [Language Reference](LANGUAGE_REFERENCE.md), per l'architettura [Architecture](ARCHITECTURE.md) e per la direzione futura [Vision](VISION.md).
+
+
+## Aggiornamento v0.3.0
+
+Il compilatore comprende ora un sottoinsieme molto più ampio di istruzioni italiane e inglesi, espressioni matematiche e costrutti di controllo. Sono presenti forme base sperimentali in spagnolo, francese e tedesco, con un'unica rappresentazione intermedia (`--emit-ir`) e un unico backend C++20. Un LLM locale opzionale può normalizzare istruzioni più libere mediante `--llm` o `--llm-all`; il modello **non è incluso**. Questa release non fornisce ancora la comprensione universale del linguaggio naturale né un sistema semantico completamente tipizzato.

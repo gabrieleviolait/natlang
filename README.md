@@ -1,175 +1,155 @@
-# NatLang — Native Natural-Language Compiler (experimental v0.2)
+# NatLang — Native Natural-Language Compiler
 
-An **actual C++20 implementation** of a small English-like programming language. `natc` translates `.nat` source into standalone C++20 translation units, then uses the installed Clang/GCC/MSVC toolchain to build a real native binary. The generated programs **never call an LLM**. A tiny local model can optionally rewrite unfamiliar English into NatLang's supported form.
+**v0.3.0 | Multilingual frontend · native C++20 output · mathematical library · optional local LLM**
 
-> **Honest scope:** This is a working, limited MVP, **not** yet a universal, syntax-free, general-purpose programming language. There is no fine-tuned model or bundled GGUF. The runtime has dynamic `Value` types rather than a complete static type system; it does not yet support GUI programming, general-purpose networking (only bounded IPv4 LAN ICMP discovery), object-oriented classes, native library imports, asynchronous tasks, or a full standard library. LLM results are not semantically guaranteed correct.
+NatLang is an experimental programming-language compiler. Write programs using readable sentences in **Italian or English**, mix languages inside a file, and build a real native executable through C++20. Common Spanish, French and German statements are recognized, while an **optional, user-provided local LLM** can try to normalize less structured multilingual instructions.
 
-## Documentation and project idea
+**Important:** This is a functional research prototype, **not** a fully syntax-free, universal natural-language compiler. No GGUF/model weights are included, and tiny model accuracy has not been validated. The deterministic frontend recognizes an explicit, documented subset. AI-generated normalized programs need review.
 
-- **[Vision and original concept](docs/VISION.md)** — motivation, long-term general-purpose goal and what distinguishes NatLang.
-- **[Idea progettuale (italiano)](docs/IDEA_IT.md)** — obiettivi, scelte architetturali e stato reale del prototipo.
-- **[Architecture](docs/ARCHITECTURE.md)** — concrete compilation pipeline, implementation layout and design constraints.
-- **[Language reference](docs/LANGUAGE_REFERENCE.md)** — exact v0.1 statements, expressions and limitations.
-- **[Local LLM integration](docs/LOCAL_LLM.md)** — optional llama.cpp server, API shape, limitations and evaluation approach.
-- **[Roadmap](docs/ROADMAP.md)** — proposed milestones, not promises.
-- **[Contributing](CONTRIBUTING.md)** · **[Security](SECURITY.md)** · **[Changelog](CHANGELOG.md)** · **[License](LICENSE)**
-
-## 1. Windows setup
-
-Install Visual Studio 2022 Build Tools with **Desktop development with C++** and CMake (or equivalent Clang/MinGW-w64 toolchain). Open **Developer PowerShell for VS 2022**, extract this repository, and run:
-
-```powershell
-cmake -S . -B build
-cmake --build build --config Release
-.\build\Release\natc.exe examples\countdown.nat -o countdown.exe --compiler cl
-.\countdown.exe
-```
-
-Or run `powershell -ExecutionPolicy Bypass -File scripts\build_windows.ps1` from the Developer PowerShell.
-
-For a Ninja/MinGW build, the executable may instead be at `.\build\natc.exe`, and select `--compiler clang++` or `--compiler g++`.
-
-## 2. Linux/macOS setup
-
-With CMake 3.16+, a C++20 compiler, and optionally curl:
-
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j
-./build/natc examples/countdown.nat -o countdown
-./countdown
-```
-
-Or `bash scripts/build_linux.sh`. The compiler binary itself has **no dependency on Python**; Python is needed only to run the integration tests.
-
-## 3. Try it immediately: calculator and user input
-
-You can run a single natural expression **without creating a file**:
-
-```powershell
-natc --eval "2 + 2"          # prints 4
-natc --eval "2 plus 2"       # prints 4
-natc --eval "2 piu 2"        # prints 4
-```
-
-Inside `.nat` files, **bare expressions are printed**. Both English and some Italian input forms work:
+## Try it
 
 ```text
 2 + 2
 2 plus 2
-Ask user "Your name? " and store in name
-Show "Hello, " + name
-Chiedi all'utente un numero e salva in eta
-Mostra eta + 1
+2 più 2
+Mostra 2 elevato a 5
+Mostra radice quadrata di 81
+Mostra 15 per cento di 200
+Chiedi all'utente un numero e salva in x
+Se x è maggiore di 10
+    Mostra "Grande"
+Altrimenti
+    Mostra "Piccolo"
+Fine
 ```
 
-`Ask user` and `Chiedi all'utente` alone read a line of text into the built-in variable `answer`. They prompt at runtime, like Python's `input()`. Numeric input uses a number conversion and rejects invalid values.
-
-### IPv4 ICMP network discovery
+The first six expressions print `4`, `4`, `4`, `32`, `9`, `30`. Later statements prompt and branch according to the input.
 
 ```text
-Scan IP 192.168.1.1
-Scan this ip 192.168.1.10
-Scan this ip
-Scan network
+Imposta n a 3
+Repeat 2 times
+    Increase n by 1
+Fine
+Show n
 ```
 
-`Scan this ip` without an address prompts for one. You may also set an IP string in a variable and use `Scan IP target`, or call `ping(target)` inside an expression. A single-IP scan is a one-shot ICMP ping; `Scan network` enumerates up to **two** active private LAN IPv4 interface `/24` slices and checks at most 508 host addresses with up to 16 workers. There is no port scan or exploit detection. Hosts that block ping appear as **no ICMP response**, not conclusively offline. The system `ping` executable must be installed/available, and environment permissions may prevent ICMP even for localhost. Network discovery only runs when the generated executable is executed. **Only scan networks and hosts you own or are authorized to test.**
+This compiles to a native executable and prints `5`. Italian and English statements share the same internal statement IR and backend.
 
-## 4. Example .nat program
+## Build the compiler
 
-```text
-Set counter to 5
-Repeat until counter is 0
-    Show counter
-    Decrease counter by 1
-End
-Show "Done!"
+Requires **CMake ≥ 3.16** and a **C++20 compiler**. `natc` itself is written in C++20 and needs neither Python nor an LLM to run. A host C++ toolchain is required to compile `.nat` into native executables.
+
+**Windows (Developer PowerShell with Visual Studio Build Tools / MSVC):**
+
+```powershell
+cmake -S . -B build
+cmake --build build --config Release
+.\build\Release\natc.exe examples\multilingual_math.nat -o math.exe --compiler cl
+.\math.exe
 ```
 
-Usage:
+**Linux / macOS (Clang or GCC):**
 
 ```sh
-natc program.nat -o app                 # native binary
-natc program.nat --emit-cpp             # standalone .generated.cpp
-natc program.nat --check --explain      # parse and validate only
-natc program.nat -o app --keep-cpp      # keep generated C++
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/natc examples/multilingual_math.nat -o math
+./math
 ```
 
-**Note:** Code blocks still require `End`. Whitespace indentation is only visual. Unquoted words are variable names. Text constants must use quotes. Statements are case-insensitive; variable names are case-sensitive, ASCII identifiers. The complete, genuinely syntax-free goal remains future work.
+Single expression:
 
-## 5. Currently supported features
+```sh
+./build/natc --eval "2 plus 2"   # 4
+./build/natc --eval "2 ^ 8"      # 256
+```
 
-| Category | Sample phrase |
+Inspect / compile:
+
+```sh
+./build/natc examples/bilingual_program.nat --check --explain
+./build/natc examples/bilingual_program.nat --emit-ir program.ir.json
+./build/natc examples/bilingual_program.nat --emit-cpp program.cpp
+./build/natc examples/bilingual_program.nat -o program --keep-cpp
+```
+
+## Supported language constructs
+
+| Capability | Italian | English |
+| --- | --- | --- |
+| Assignment | `Imposta x a 5` | `Set x to 5` |
+| Printing | `Mostra x * 2` | `Show x * 2` |
+| Input | `Chiedi all'utente un numero e salva in x` | `Ask user for a number and store in x` |
+| Conditional | `Se x è maggiore di 3` | `If x is greater than 3` |
+| Alternative | `Altrimenti` | `Otherwise` |
+| Counted loop | `Ripeti 3 volte` | `Repeat 3 times` |
+| Condition loop | `Ripeti finché x è uguale a 3` | `Repeat until x equals 3` |
+| While loop | `Mentre x < 5` | `While x < 5` |
+| Function | `Funzione doppio(x)` | `Function double(x)` |
+| Return | `Restituisci x * 2` | `Return x * 2` |
+| List | `Crea una lista chiamata numeri` | `Create a list named numbers` |
+| Append | `Aggiungi 4 a numeri` | `Add 4 to numbers` |
+| End block | `Fine` | `End` |
+| Local ICMP | `Scansiona la rete locale` | `Scan network` |
+
+Quoted strings retain their original content. Blocks **currently require `Fine` or `End`**; indentation does not define blocks. Identifier names are currently ASCII, and case-sensitive.
+
+See [Language Reference](docs/LANGUAGE_REFERENCE.md), [Multilingual guide](docs/MULTILINGUAL.md) and [Examples](examples). Spanish / French / German keyword support is **partial and experimental**, not at the same deterministic coverage level as IT/EN. The local model can attempt freer variants in all five languages.
+
+## Mathematics
+
+Native execution supports arithmetic `+ - * / % ^ **`, parentheses, unary signs, decimal values, and right-associative exponents; e.g. `2 ^ 3 ^ 2` is `512`, while `-2 ^ 2` is `-4`.
+
+| Concept | Expression examples |
 | --- | --- |
-| Variables | `Set price to 20`, `Remember name as "Alex"` |
-| Arithmetic | `Set total to price * 1.2`, `Increase total by 5`, `2 plus 2` → `4` |
-| Output | `Show "Total: " + total` |
-| Input | `Ask for a number and store it in answer`, `Ask user`, `Chiedi all'utente un numero e salva in eta` |
-| Multiple inputs | `Ask for 5 numbers and store them in values` |
-| Conditions | `If answer is greater than 10` / `Otherwise` / `End` |
-| Loops | `Repeat until answer equals 10` / `End` |
-| Counted loops | `Repeat 3 times` / `End` |
-| Other loops | `While answer < 10` / `End` |
-| Functions | `Define a function called square with parameter n` / `Return n * n` / `End` |
-| Lists | `Create a list named values`, `Add 3 to values`, `Show [1, 2, 3]` |
-| List operations | `sum(values)`, `average(values)`, `min(values)`, `max(values)`, `length(values)` |
-| Files | `Save total to file "result.txt"`, `Load file "result.txt" into contents` |
-| IPv4 discovery | `Scan network`, `Scan this ip`, `Scan IP 192.168.1.1`, `ping(target)` |
-| Flow control | `Break`, `Continue`, `Return` |
-| Logic | `and`, `or`, `not`, `==`, `!=`, `>=`, `<=`, `is`, `equals`, `greater than` |
+| Addition/subtraction | `2 plus 2`, `2 più 2`, `10 meno 3` |
+| Multiplication/division | `5 per 4`, `7 diviso 2`, `3 times 4` |
+| Remainder | `10 modulo 3` |
+| Powers | `2 elevato a 5`, `pow(2,5)`, `potenza(2,5)` |
+| Roots | `sqrt(81)`, `radice(81)`, `radice quadrata di 81`, `cbrt(27)` |
+| Percentages | `15 per cento di 200`, `percent(15,200)`, `percentuale(15,200)` |
+| More math | `abs`, `round`, `floor`, `ceil`, `ln`, `log10`, `exp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `factorial`, `clamp`, `sign` |
+| Lists | `somma([2,4,6])`, `media([2,4,6])`, `minimo([2,4,6])`, `massimo([2,4,6])` |
+| Constants | `pi`, `euler` |
 
-Literal strings preserve their contents during phrase matching. Invalid or unknown variable/function references are rejected. Variables used before assignment fail at runtime. A runtime error also occurs when an operation expects a different dynamic type.
+**Radians** are used for trigonometry; `log()` means natural logarithm. Invalid operations such as division by zero, negative square root and invalid logarithm domain raise runtime errors. All numbers currently use IEEE-754 `double`, not arbitrary precision or decimal financial arithmetic. [Full mathematical reference](docs/MATH.md).
 
-## 6. Optional tiny LLM (100% local)
+## Less rigid syntax via a local LLM
 
-The compiler doesn't require a model for its built-in natural phrases; free-form multilingual requests remain outside the deterministic subset. To handle freer English, start **llama.cpp `llama-server`** with an instruction-tuned GGUF (for example an experimental 0.6B-class model):
+The deterministic parser is the fast, inspectable default. With `--llm`, NatLang asks a local `llama.cpp` inference server **only if deterministic parsing fails**. With `--llm-all`, it tries to normalize every program, including prose statements that may be syntactically valid but meant differently. The model produces **canonical NatLang source**, then the same compiler parses, validates and emits C++; the executable does **not** depend on AI.
+
+Start a compatible local model yourself:
 
 ```sh
-llama-server -m /path/to/model.gguf --host 127.0.0.1 --port 8080 -c 4096
+llama-server -m /path/to/instruction-model.gguf --host 127.0.0.1 --port 8080 -c 4096
+./build/natc examples/free_form_multilingual.nat --llm-all --show-normalized --keep-cpp -o demo
 ```
 
-Then compile:
+The model is **not bundled or benchmarked**. `llama.cpp` must be installed separately, and `curl` must be available. The endpoint is restricted to loopback. Always review the normalized program, especially before running code that accesses local files or networks. See [Local LLM](docs/LOCAL_LLM.md) and [Natural-language design](docs/NATURAL_LANGUAGE.md).
+
+## Project documentation
+
+- [Idea in italiano](docs/IDEA_IT.md) · [Vision](docs/VISION.md)
+- [Architecture and shared IR](docs/ARCHITECTURE.md) · [IR details](docs/SEMANTIC_IR.md)
+- [Language Reference](docs/LANGUAGE_REFERENCE.md) · [Multilingual](docs/MULTILINGUAL.md) · [Math](docs/MATH.md)
+- [LLM integration](docs/LOCAL_LLM.md) · [Natural-language roadmap](docs/NATURAL_LANGUAGE.md) · [Roadmap](docs/ROADMAP.md)
+- [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+
+## Tests
 
 ```sh
-natc examples/free_form_llm.nat --llm --show-normalized -o demo
+python3 -m unittest discover -s tests -v
 ```
 
-`--llm` tries the deterministic translator first, calling the local server only if it fails. `--llm-all` always requests normalization, even when the deterministic parser succeeds. `--llm-url http://127.0.0.1:8080/v1/chat/completions` points to a different local port.
+The tests exercise native compilation and execution, IT/EN + selected ES/FR/DE programs, mathematical behavior and errors, input/output, lists, file operations and a **mock** `llama-server`. Mock protocol tests **do not demonstrate the accuracy of a real LLM**. GitHub Actions runs Linux and Windows jobs; platform-specific results must be checked on GitHub.
 
-The adapter uses the **OpenAI-style chat-completions endpoint** and requests a schema-constrained JSON object of shape `{"program":"..."}`. It calls local `curl` and assumes `llama-server` is already installed and running. There is no remote inference and the compiler rejects non-loopback server URLs. **Model output is parsed and must pass deterministic validation**, but this does not prove that the model preserved the intended meaning. Always inspect generated/normalized code, especially for consequential actions. Very small models may be too inaccurate; larger models or task-specific fine-tuning may be needed. GPU is not mandatory for small GGUF models.
+## Limitations and responsible use
 
-### Example: human-language-to-native pipeline
+- Arbitrary free-form prose, modules, classes, imports, GUI, robust general networking and complete static typing are **not** implemented. The statement IR is not yet a fully typed expression AST.
+- Model translation can be plausible yet wrong. Never assume compiling proves semantic equivalence to the original natural-language request.
+- `Scan network` is a bounded, ICMP-only scan of private LAN interfaces; an ICMP timeout does not prove a host is offline. Scan only networks and hosts you are authorized to inspect.
+- Compiler paths and the chosen toolchain are trusted inputs; this prototype is **not** a secure sandbox for hostile source programs.
 
-```text
-free English -> local LLM (optional) -> canonical lines
-       -> structural AST -> expression parser & name checks
-       -> standalone C++20 -> clang++/g++/cl -> native executable
-```
+**License:** MIT — © 2026 Gabriele Viola and NatLang contributors. Contributions welcome.
 
-The host compiler is a separate dependency. `natc` currently uses **C++ code generation**, not a home-built assembler, optimizer, or direct LLVM IR backend.
-
-## 7. Tests
-
-```sh
-python -m unittest discover -s tests -v
-```
-
-Uses the built `build/natc` and a host C++ compiler. Includes end-to-end generated executable tests, syntax errors, loops, recursion, file/lists/input, and a fake llama-server that verifies the LLM adapter protocol **without testing any real model quality**.
-
-## 8. Practical roadmap
-
-1. **v0.3:** Expression AST nodes, lexical scopes, definite-assignment checks, structured diagnostics and immutable semantic IR.
-2. **v0.4:** Static type inference, modules, maps/dictionaries, error handling, packages and safer process execution.
-3. **v0.5:** Language-model evaluation dataset, normalization caching, more multilingual expressions and ambiguity reports.
-4. **Later:** GUI, general networking, async/concurrency, richer library ecosystem and optional LLVM IR backend.
-
-## Security and trust
-
-- Executing compiled programs can read/write files based on `.nat` instructions. Run unknown sources in a sandbox.
-- An LLM can misunderstand valid English even when its normalized result compiles; semantic equivalence is not guaranteed.
-- `natc` currently runs the selected C++ compiler through a system shell; treat the compiler binary, command-line arguments, filesystem paths, and local server as trusted inputs.
-- Only loopback HTTP endpoints are accepted for LLM normalization. Local prompts are transmitted to the local server; no external model/provider is required.
-
-License: MIT (see LICENSE). Prototype designed for further experimentation and contributions.
-Project initiator: Gabriele Viola. Contributions welcome under the MIT license.
+**Build-speed tip:** use `--opt-level 0` for faster generated-program compilation during development; the default remains `--opt-level 2`. This only affects the host C++ compilation step.

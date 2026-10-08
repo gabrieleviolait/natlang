@@ -1,0 +1,25 @@
+# NatLang v0.3: same engine, arithmetic expressed in multiple languages
+Mostra 2 + 2
+Mostra 2 plus 2
+Mostra 2 più 2
+Mostra 5 per 4
+Mostra 7 diviso 2
+Mostra 10 modulo 3
+Mostra 2 elevato a 5
+Mostra 2 ** 3 ^ 2
+Mostra -2^2
+Mostra sqrt(81)
+Mostra radice quadrata di 81
+Mostra 15 per cento di 200
+Mostra 15% di 200
+Mostra percentuale(25,80)
+Mostra fattoriale(5)
+Mostra arrotonda(2.6)
+Mostra abs(-7)
+Mostra log10(1000)
+Mostra seno(0)
+Mostra media([2,4,6])
+Mostra somma([2,4,6])
+Mostra minimo([2,4,6])
+Mostra massimo([2,4,6])
+Mostra pi

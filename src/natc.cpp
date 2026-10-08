@@ -23,11 +23,43 @@ static string trim(string s) {
     return a==string::npos ? "" : s.substr(a,s.find_last_not_of(" \t\r\n")-a+1);
 }
 static string lower(string s) {for(char &c:s)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));return s;}
+// Keyword case folding is ASCII-only. Accented spelling variants are matched explicitly.
+static string stripTerminator(string s) {
+    s=trim(s);
+    while(!s.empty()&&(s.back()=='.'||s.back()==';'||s.back()=='?'))s.pop_back();
+    return trim(s);
+}
 static bool match(const string &s,const char *pattern,std::smatch &m) {return std::regex_match(s,m,std::regex(pattern,std::regex::icase));}
 static string read(const fs::path &p) {std::ifstream f(p,std::ios::binary);if(!f)throw Error("Cannot open: "+p.string());std::ostringstream s;s<<f.rdbuf();return s.str();}
 static void write(const fs::path &p,const string &s) {std::ofstream f(p,std::ios::binary);if(!f)throw Error("Cannot write: "+p.string());f<<s;if(!f)throw Error("Write failed: "+p.string());}
+// A single statement-level frontend canonicalizes common keywords across languages.
+// All supported spellings feed the SAME Parser, Node IR, checks and C++ backend.
+static string canonicalizeStatement(const string &input) {
+    string s=input;
+    const std::vector<std::pair<const char*,const char*>> replacements={
+        {R"(^(?:muestra|mostrar|enseña|affiche|afficher|montre|montrez|zeige|zeigen|gib aus) (.+)$)","Show $1"},
+        {R"(^(?:si|wenn) (.+)$)","If $1"},
+        {R"(^(?:sino|sinon|sonst|autrement)$)","Otherwise"},
+        {R"(^(?:fin|ende|fin de (?:boucle|fonction|condition))$)","End"},
+        {R"(^repite (.+) veces$)","Repeat $1 times"},
+        {R"(^(?:répète|repete) (.+) fois$)","Repeat $1 times"},
+        {R"(^wiederhole (.+) mal$)","Repeat $1 times"},
+        {R"(^(?:establece|define|asigna) ([A-Za-z_]\w*) (?:como|en|a) (.+)$)","Set $1 to $2"},
+        {R"(^(?:définis|definis|mets) ([A-Za-z_]\w*) (?:à|a|comme) (.+)$)","Set $1 to $2"},
+        {R"(^setze ([A-Za-z_]\w*) auf (.+)$)","Set $1 to $2"},
+        {R"(^(?:pregunta al usuario|demande (?:à|a) l['’]utilisateur|frage den benutzer)$)","Ask user"},
+        {R"(^pregunta al usuario (?:un )?(?:número|numero) y (?:guarda|almacena) en ([A-Za-z_]\w*)$)","Ask user for a number and store in $1"},
+        {R"(^demande (?:à|a) l['’]utilisateur un nombre et (?:stocke|enregistre) dans ([A-Za-z_]\w*)$)","Ask user for a number and store in $1"},
+        {R"(^frage den benutzer nach einer zahl und speichere in ([A-Za-z_]\w*)$)","Ask user for a number and store in $1"}
+    };
+    for(const auto &[p,r]:replacements) {
+        std::regex pattern(p,std::regex::icase);
+        if(std::regex_match(s,pattern))return std::regex_replace(s,pattern,r);
+    }
+    return s;
+}
 static bool identifier(const string &s) {return std::regex_match(s,std::regex("[A-Za-z_][A-Za-z0-9_]*"));}
-static bool reserved(const string &s) {static const std::set<string> words={"true","false","if","else","end","function","return","while","for","repeat","break","continue","null","and","or","not"};return words.count(lower(s))!=0;}
+static bool reserved(const string &s) {static const std::set<string> words={"true","false","if","else","end","function","return","while","for","repeat","break","continue","null","and","or","not","vero","falso","se","altrimenti","fine","mentre","ritorna","ripeti","e","o","non"};return words.count(lower(s))!=0;}
 static void validId(const string &s,int line) {if(!identifier(s)||reserved(s))throw Error("Line "+std::to_string(line)+": invalid name: "+s);}
 static string cppQuote(const string &s) {
     string o="\"";
@@ -49,10 +81,10 @@ struct Parser {
     explicit Parser(const string &source) {
         std::istringstream f(source);string s;int n=0;
         while(std::getline(f,s)) {
-            ++n;s=trim(s);
+            ++n;s=stripTerminator(s);
             if(s.empty()||s[0]=='#'||s.rfind("//",0)==0)continue;
             if(s.back()==':'&&s.size()>1)s.pop_back();
-            lines.push_back({n,s});
+            lines.push_back({n,canonicalizeStatement(s)});
         }
     }
     std::vector<string> params(const string &s,int line) {
@@ -65,32 +97,38 @@ struct Parser {
         std::vector<Node> out;std::smatch m;
         while(at<lines.size()) {
             auto line=lines[at++];auto &s=line.s;
-            if(match(s,R"(end( if| loop| function| repeat| while)?)",m)) {
+            if(match(s,R"((?:end|fine)(?: (?:if|loop|function|repeat|while|se|ciclo|funzione|ripeti|mentre))?)",m)) {
                 if(!nested)throw Error("Line "+std::to_string(line.num)+": unexpected END");
                 return out;
             }
-            if(match(s,R"(else|otherwise)",m)) {
+            if(match(s,R"(else|otherwise|altrimenti|(?:senno|sennò))",m)) {
                 if(!allowElse)throw Error("Line "+std::to_string(line.num)+": unexpected ELSE");
                 --at;return out;
             }
             Node n;n.line=line.num;
-            if(match(s,R"(if (.+?)(?: then)?)",m)) {
+            if(match(s,R"((?:if|se) (.+?)(?: (?:then|allora))?)",m)) {
                 n.kind=K::If;n.a=trim(m[1]);n.body=seq(true,true,inFunction,loopDepth);
-                if(at<lines.size()&&match(lines[at].s,R"(else|otherwise)",m)) {
+                if(at<lines.size()&&match(lines[at].s,R"(else|otherwise|altrimenti|(?:senno|sennò))",m)) {
                     ++at;n.otherwise=seq(true,false,inFunction,loopDepth);
                 }
                 out.push_back(std::move(n));continue;
             }
-            if(match(s,R"(repeat until (.+))",m)) {n.kind=K::Until;n.a=trim(m[1]);n.body=seq(true,false,inFunction,loopDepth+1);}
-            else if(match(s,R"(while (.+))",m)) {n.kind=K::While;n.a=trim(m[1]);n.body=seq(true,false,inFunction,loopDepth+1);}
-            else if(match(s,R"(repeat (.+) times?)",m)) {n.kind=K::Times;n.a=trim(m[1]);n.body=seq(true,false,inFunction,loopDepth+1);}
-            else if(match(s,R"(function ([A-Za-z_]\w*)\(([^)]*)\))",m)) {n.kind=K::Function;n.a=m[1];n.params=params(m[2],line.num);if(nested||inFunction)throw Error("Line "+std::to_string(line.num)+": functions must be top-level");n.body=seq(true,false,true,0);}
-            else if(match(s,R"(define (?:a )?function (?:called )?([A-Za-z_]\w*)(?: with (?:input|parameter|parameters) (.+))?)",m)) {n.kind=K::Function;n.a=m[1];n.params=params(m[2],line.num);if(nested||inFunction)throw Error("Line "+std::to_string(line.num)+": functions must be top-level");n.body=seq(true,false,true,0);}
+            if(match(s,R"((?:repeat until|ripeti finch[eéè]|ripeti fino a quando|ripeti fino a che) (.+))",m)) {n.kind=K::Until;n.a=trim(m[1]);n.body=seq(true,false,inFunction,loopDepth+1);}
+            else if(match(s,R"((?:while|mentre|finch[eéè]) (.+))",m)) {n.kind=K::While;n.a=trim(m[1]);n.body=seq(true,false,inFunction,loopDepth+1);}
+            else if(match(s,R"((?:repeat (.+) times?|ripeti (.+) volte))",m)) {n.kind=K::Times;n.a=trim(m[1].matched?m[1]:m[2]);n.body=seq(true,false,inFunction,loopDepth+1);}
+            else if(match(s,R"((?:function|funzione) ([A-Za-z_]\w*)\(([^)]*)\))",m)) {n.kind=K::Function;n.a=m[1];n.params=params(m[2],line.num);if(nested||inFunction)throw Error("Line "+std::to_string(line.num)+": functions must be top-level");n.body=seq(true,false,true,0);}
+            else if(match(s,R"((?:define (?:a )?function (?:called )?|definisci (?:una? )?funzione (?:chiamata )?|crea (?:una? )?funzione (?:chiamata )?)([A-Za-z_]\w*)(?:(?: with (?:input|parameter|parameters)| con (?:parametr[oi]|parametri)) (.+))?)",m)) {n.kind=K::Function;n.a=m[1];n.params=params(m[2],line.num);if(nested||inFunction)throw Error("Line "+std::to_string(line.num)+": functions must be top-level");n.body=seq(true,false,true,0);}
             else if(match(s,R"((?:let|set|remember|store) ([A-Za-z_]\w*) (?:be|to|as|equal to) (.+))",m)) {n.kind=K::Assign;n.a=m[1];n.b=trim(m[2]);}
+            else if(match(s,R"((?:imposta|assegna|definisci|metti) ([A-Za-z_]\w*) (?:a|come|uguale a|su) (.+))",m)) {n.kind=K::Assign;n.a=m[1];n.b=trim(m[2]);}
+            else if(match(s,R"((?:ricorda|memorizza) ([A-Za-z_]\w*) (?:come|uguale a|a) (.+))",m)) {n.kind=K::Assign;n.a=m[1];n.b=trim(m[2]);}
             else if(match(s,R"((?:create|make) (?:an? )?list (?:called|named) ([A-Za-z_]\w*))",m)) {n.kind=K::Assign;n.a=m[1];n.b="[]";}
+            else if(match(s,R"(crea (?:una? )?lista (?:chiamata |di nome )?([A-Za-z_]\w*))",m)) {n.kind=K::Assign;n.a=m[1];n.b="[]";}
             else if(match(s,R"((?:increase|increment) ([A-Za-z_]\w*) by (.+))",m)) {n.kind=K::Assign;n.a=m[1];n.b=n.a+" + ("+trim(m[2])+")";}
+            else if(match(s,R"((?:incrementa|aumenta) ([A-Za-z_]\w*) di (.+))",m)) {n.kind=K::Assign;n.a=m[1];n.b=n.a+" + ("+trim(m[2])+")";}
             else if(match(s,R"((?:decrease|decrement) ([A-Za-z_]\w*) by (.+))",m)) {n.kind=K::Assign;n.a=m[1];n.b=n.a+" - ("+trim(m[2])+")";}
+            else if(match(s,R"((?:decrementa|diminuisci|riduci) ([A-Za-z_]\w*) di (.+))",m)) {n.kind=K::Assign;n.a=m[1];n.b=n.a+" - ("+trim(m[2])+")";}
             else if(match(s,R"((?:add|append|put) (.+) (?:to|into) ([A-Za-z_]\w*))",m)) {n.kind=K::Append;n.a=m[2];n.b=trim(m[1]);}
+            else if(match(s,R"((?:aggiungi|inserisci|accoda) (.+) (?:a|alla lista|in) ([A-Za-z_]\w*))",m)) {n.kind=K::Append;n.a=m[2];n.b=trim(m[1]);}
             else if(match(s,R"(ask (?:the user )?for (?:a |an )?(number|text|string)(?: and)? (?:store (?:it )?(?:in|as)|called|named) ([A-Za-z_]\w*))",m)) {n.kind=K::Ask;n.a=m[2];n.b=lower(m[1]);}
             else if(match(s,R"(ask (?:the )?user(?: for (?:a |an )?(number|text|string))?(?: and (?:store (?:it )?(?:in|as)|save (?:it )?as) ([A-Za-z_]\w*))?)",m)) {
                 n.kind=K::Ask;n.a=m[2].matched?string(m[2]):"answer";n.b=lower(m[1].matched?string(m[1]):"text");n.c=n.b=="number"?"Number: ":"Input: ";
@@ -105,17 +143,20 @@ struct Parser {
                 n.kind=K::Ask;n.a=m[2].matched?string(m[2]):"answer";n.b="text";n.c=string(m[1]);
             }
             else if(match(s,R"(ask (?:the user )?for (.+) numbers?(?: and)? store them in ([A-Za-z_]\w*))",m)) {n.kind=K::AskMany;n.a=m[2];n.b=trim(m[1]);}
-            else if(match(s,R"((?:show|print|display|output|say|mostra|stampa) (.+))",m)) {n.kind=K::Print;n.a=trim(m[1]);}
-            else if(match(s,R"(scan (?:the |my )?(?:local )?network|scan (?:la )?rete(?: locale)?)",m)) {n.kind=K::ScanNetwork;}
-            else if(match(s,R"((?:scan|ping|scansiona) (?:(?:this|the|questo) )?(?:ip(?: address)?|host|indirizzo ip)(?: (.+))?)",m)) {
+            else if(match(s,R"(chiedi (?:all['’]utente|ad? (?:un )?utente) (.+) numeri (?:e )?salva(?:li)? in ([A-Za-z_]\w*))",m)) {n.kind=K::AskMany;n.a=m[2];n.b=trim(m[1]);}
+            else if(match(s,R"((?:show|print|display|output|say|mostra|stampa|visualizza|mostrami|scrivi|calcola|compute|calculate|quanto fa|what is) (.+))",m)) {n.kind=K::Print;n.a=trim(m[1]);}
+            else if(match(s,R"((?:scan (?:the |my )?(?:local )?network|scan (?:la )?rete(?: locale)?|(?:scansiona|analizza|esamina) (?:la )?rete(?: locale)?))",m)) {n.kind=K::ScanNetwork;}
+            else if(match(s,R"((?:scan|ping|scansiona|analizza) (?:(?:this|the|questo|quest['’]) )?(?:ip(?: address)?|host|indirizzo ip)(?: (.+))?)",m)) {
                 n.kind=K::ScanHost;n.a=trim(m[1]);
             }
             else if(match(s,R"((?:scan|ping|scansiona) ([0-9]+(?:\.[0-9]+){3}))",m)) {n.kind=K::ScanHost;n.a=trim(m[1]);}
-            else if(match(s,R"(return (.+))",m)) {n.kind=K::Return;n.a=trim(m[1]);if(!inFunction)throw Error("Line "+std::to_string(line.num)+": RETURN outside function");}
+            else if(match(s,R"((?:return|ritorna|restituisci) (.+))",m)) {n.kind=K::Return;n.a=trim(m[1]);if(!inFunction)throw Error("Line "+std::to_string(line.num)+": RETURN outside function");}
             else if(match(s,R"(save (.+) to (?:a )?file (.+))",m)) {n.kind=K::Save;n.a=trim(m[1]);n.b=trim(m[2]);}
+            else if(match(s,R"(salva (.+) (?:nel|su|in un|in) file (.+))",m)) {n.kind=K::Save;n.a=trim(m[1]);n.b=trim(m[2]);}
             else if(match(s,R"(load file (.+) (?:into|as) ([A-Za-z_]\w*))",m)) {n.kind=K::Assign;n.a=m[2];n.b="read_file("+trim(m[1])+")";}
-            else if(match(s,R"(break|stop the loop)",m)) {n.kind=K::Break;if(!loopDepth)throw Error("Line "+std::to_string(line.num)+": BREAK outside loop");}
-            else if(match(s,R"(continue|skip to next iteration)",m)) {n.kind=K::Continue;if(!loopDepth)throw Error("Line "+std::to_string(line.num)+": CONTINUE outside loop");}
+            else if(match(s,R"((?:leggi|carica) file (.+) (?:in|come|dentro) ([A-Za-z_]\w*))",m)) {n.kind=K::Assign;n.a=m[2];n.b="read_file("+trim(m[1])+")";}
+            else if(match(s,R"(break|stop the loop|interrompi|esci dal ciclo)",m)) {n.kind=K::Break;if(!loopDepth)throw Error("Line "+std::to_string(line.num)+": BREAK outside loop");}
+            else if(match(s,R"(continue|skip to next iteration|continua|passa alla prossima iterazione)",m)) {n.kind=K::Continue;if(!loopDepth)throw Error("Line "+std::to_string(line.num)+": CONTINUE outside loop");}
             else { // A bare expression is a statement whose result is printed, e.g. "2 plus 2".
                 n.kind=K::Print;n.a=s;
             }
@@ -135,19 +176,71 @@ static string normalizeOutsideQuotes(const string &s) {
             {R"(\b(?:is )?(?:less|lower|smaller) than\b)","<"},
             {R"(\b(?:is equal to|equals|is)\b)","=="},
             {R"(\bmultiplied by\b)","*"},{R"(\bdivided by\b)","/"},
-            {R"(\b(?:plus|piu|più)\b)","+"},{R"(\b(?:minus|meno)\b)","-"},
+            {R"(\b(?:plus|piu|più|sommato a|aggiunto a)\b)","+"},{R"(\b(?:minus|meno|sottratto|sottrai)\b)","-"},
             {R"(\bthe (?:highest|largest|biggest|maximum) (?:number|value) in ([A-Za-z_]\w*)\b)","max($1)"},
             {R"(\bthe (?:smallest|lowest|minimum) (?:number|value) in ([A-Za-z_]\w*)\b)","min($1)"},
             {R"(\bthe average of ([A-Za-z_]\w*)\b)","average($1)"},
             {R"(\bthe sum of ([A-Za-z_]\w*)\b)","sum($1)"},
             {R"(\bthe length of ([A-Za-z_]\w*)\b)","length($1)"}
         };
-        // UTF-8 accented Italian operators need explicit boundaries (regex \b is ASCII word-based).
+        // Translate *expressions* only, never quoted strings or variable names embedded in quotes.
+        // Longer idioms must precede individual words; UTF-8 accented variants are explicit.
+        const std::vector<std::pair<const char*,const char*>> translations={
+            {R"(\b(?:e maggiore o uguale a|è maggiore o uguale a|maggiore o uguale a|almeno)\b)",">="},
+            {R"(\b(?:e minore o uguale a|è minore o uguale a|minore o uguale a|al massimo)\b)","<="},
+            {R"(\b(?:e diverso da|è diverso da|diverso da|non uguale a)\b)","!="},
+            {R"(\b(?:e maggiore di|è maggiore di|maggiore di)\b)",">"},
+            {R"(\b(?:e minore di|è minore di|minore di)\b)","<"},
+            {R"(\b(?:e uguale a|è uguale a|uguale a|equivale a)\b)","=="},
+            {R"(\b(?:moltiplicato per|moltiplicato da)\b)","*"},
+            {R"(\b(?:diviso per|diviso da|diviso)\b)","/"},
+            {R"(\b(?:per)\b)","*"},
+            {R"(\b(?:elevato alla potenza di|elevato a|alla potenza di|to the power of|raised to the power of)\b)","^"},
+            {R"(\b(?:modulo|resto della divisione per|remainder of division by)\b)","%"},
+            {R"(\b(?:somma di|somma della lista|sum of) ([A-Za-z_]\w*)\b)","sum($1)"},
+            {R"(\b(?:media di|media della lista|average of|media dei numeri in) ([A-Za-z_]\w*)\b)","average($1)"},
+            {R"(\b(?:massimo di|massimo della lista) ([A-Za-z_]\w*)\b)","max($1)"},
+            {R"(\b(?:minimo di|minimo della lista) ([A-Za-z_]\w*)\b)","min($1)"},
+            {R"(\b(?:lunghezza di|lunghezza della lista) ([A-Za-z_]\w*)\b)","length($1)"},
+            {R"(\b(?:radice quadrata di|the square root of) ([0-9]+(?:\.[0-9]+)?|[A-Za-z_]\w*)\b)","sqrt($1)"},
+            {R"(\b(?:valore assoluto di|absolute value of) ([0-9]+(?:\.[0-9]+)?|[A-Za-z_]\w*)\b)","abs($1)"},
+            {R"(\b(?:vero)\b)","true"},{R"(\b(?:falso)\b)","false"},
+            {R"(\b(?:non)\b)","not"},{R"(\b(?:e)\b)","and"},{R"(\b(?:o)\b)","or"},
+            {R"(\b(?:es mayor o igual que|est sup[ée]rieur ou [ée]gal [àa]|ist grosser oder gleich)\b)",">="},
+            {R"(\b(?:es menor o igual que|est inf[ée]rieur ou [ée]gal [àa]|ist kleiner oder gleich)\b)","<="},
+            {R"(\b(?:es mayor que|est sup[ée]rieur [àa]|ist grosser als)\b)",">"},
+            {R"(\b(?:es menor que|est inf[ée]rieur [àa]|ist kleiner als)\b)","<"},
+            {R"(\b(?:es igual a|est [ée]gal [àa]|ist gleich)\b)","=="},
+            {R"(\b(?:verdadero|vrai|wahr)\b)","true"},
+            {R"(\b(?:faux|falsch)\b)","false"},
+            {R"(\b(?:und|et|y)\b)","and"},
+            {R"(\b(?:oder|ou)\b)","or"},
+            {R"(\b(?:nicht|non)\b)","not"},
+            {R"(\b(?:multiplicado por|multipli[ée] par|geteilt durch)\b)","*"},
+            {R"(\b(?:dividido por|divis[ée] par)\b)","/"},
+            {R"(\b(?:m[áa]s)\b)","+"},
+            {R"(\b(?:moins)\b)","-"},
+            {R"(\b(?:mal|fois|times|multiplied by)\b)","*"},
+            {R"(\b(?:divided by|over)\b)","/"},
+            {R"(\b(?:plus|piu|più)\b)","+"},{R"(\b(?:minus|meno)\b)","-"}
+        };
+        // std::regex uses ASCII word boundaries; convert common standalone accented copulas.
+        for(const auto &[accent,ascii]:std::vector<std::pair<string,string>>{{"è","e"},{"é","e"},{"à","a"},{"ö","o"},{"ü","u"},{"ä","a"},{"ß","ss"},{"á","a"},{"ó","o"},{"ú","u"},{"í","i"}}) {
+            size_t at=0;while((at=z.find(accent,at))!=string::npos){z.replace(at,accent.size(),ascii);at+=ascii.size();}
+        }
+        // Percent expressions must be recognized before any keyword transformations.
+        z=std::regex_replace(z,std::regex(R"(\b([0-9]+(?:\.[0-9]+)?) (?:percent of|per cento di|percento di|por ciento de|pour cent de) ([0-9]+(?:\.[0-9]+)?|[A-Za-z_]\w*)\b)",std::regex::icase),"percent($1,$2)");
+        // An exponent may be described as "x squared" / "x al quadrato".
+        z=std::regex_replace(z,std::regex(R"(\b([A-Za-z_]\w*|[0-9]+(?:\.[0-9]+)?) (?:al quadrato|squared)\b)",std::regex::icase),"($1 ^ 2)");
+        z=std::regex_replace(z,std::regex(R"(\b([A-Za-z_]\w*|[0-9]+(?:\.[0-9]+)?) (?:al cubo|cubed)\b)",std::regex::icase),"($1 ^ 3)");
         z=std::regex_replace(z,std::regex(R"(\bpiù(?=\s|$|[),]))"),"+");
-        // Replace long phrases before individual operators, and quantifiers before plain words.
+        z=std::regex_replace(z,std::regex(R"(\bmás(?=\s|$|[),]))"),"+");
+        z=std::regex_replace(z,std::regex(R"(\b([0-9]+(?:\.[0-9]+)?) ?% (?:of|di|de) ([0-9]+(?:\.[0-9]+)?|[A-Za-z_]\w*)\b)",std::regex::icase),"percent($1,$2)");
         for(size_t i=0;i<6;++i)z=std::regex_replace(z,std::regex(rules[i].first,std::regex::icase),rules[i].second);
         for(size_t i=10;i<rules.size();++i)z=std::regex_replace(z,std::regex(rules[i].first,std::regex::icase),rules[i].second);
         for(size_t i=6;i<10;++i)z=std::regex_replace(z,std::regex(rules[i].first,std::regex::icase),rules[i].second);
+        for(const auto &[pattern,replacement]:translations)
+            z=std::regex_replace(z,std::regex(pattern,std::regex::icase),replacement);
         return z;
     };
     string out,fragment;
@@ -178,8 +271,8 @@ static std::vector<Token> lex(const string &src) {
             v.push_back({T::Str,z});continue;
         }
         T type=T::Op;switch(c){case '(':type=T::LParen;break;case ')':type=T::RParen;break;case '[':type=T::LBracket;break;case ']':type=T::RBracket;break;case ',':type=T::Comma;break;}
-        string op(1,c);if(type==T::Op){if(i+1<s.size()&&(s.substr(i,2)=="=="||s.substr(i,2)=="!="||s.substr(i,2)==">="||s.substr(i,2)=="<=")){op=s.substr(i,2);++i;}
-            if(op!="+"&&op!="-"&&op!="*"&&op!="/"&&op!="%"&&op!="<"&&op!=">"&&op!="=="&&op!="!="&&op!=">="&&op!="<=")throw Error("Unexpected expression character: "+op);
+        string op(1,c);if(type==T::Op){if(i+1<s.size()&&(s.substr(i,2)=="=="||s.substr(i,2)=="!="||s.substr(i,2)==">="||s.substr(i,2)=="<="||s.substr(i,2)=="**")){op=s.substr(i,2);++i;}
+            if(op!="+"&&op!="-"&&op!="*"&&op!="/"&&op!="%"&&op!="<"&&op!=">"&&op!="=="&&op!="!="&&op!=">="&&op!="<="&&op!="^"&&op!="**")throw Error("Unexpected expression character: "+op);
         }
         v.push_back({type,op});++i;
     }
@@ -197,7 +290,7 @@ struct Expr {
     Token take(){return toks.at(at++);}
     bool eat(T type){if(peek().type==type){++at;return true;}return false;}
     void expect(T type){if(!eat(type))throw Error("Line "+std::to_string(line)+": malformed expression near '"+peek().text+"'");}
-    static int prec(const string &s){if(s=="or")return 1;if(s=="and")return 2;if(s=="=="||s=="!="||s=="<"||s==">"||s=="<="||s==">=")return 3;if(s=="+"||s=="-")return 4;if(s=="*"||s=="/"||s=="%")return 5;return -1;}
+    static int prec(const string &s){if(s=="or")return 1;if(s=="and")return 2;if(s=="=="||s=="!="||s=="<"||s==">"||s=="<="||s==">=")return 3;if(s=="+"||s=="-")return 4;if(s=="*"||s=="/"||s=="%")return 5;if(s=="^"||s=="**")return 7;return -1;}
     string expr(int minp=1) {
         string lhs;Token t=take();
         if(t.type==T::Number){lhs="nat::Value("+t.text+")";}
@@ -205,10 +298,32 @@ struct Expr {
         else if(t.type==T::Id) {
             const auto low=lower(t.text);
             if(low=="true"||low=="false")lhs="nat::Value("+low+")";
+            else if(low=="pi")lhs="nat::Value(3.14159265358979323846)";
+            else if(low=="euler")lhs="nat::Value(2.71828182845904523536)";
             else if(eat(T::LParen)) {
                 std::vector<string> args;
                 if(!eat(T::RParen)){do{args.push_back(expr());}while(eat(T::Comma));expect(T::RParen);}
-                const std::map<string,std::pair<string,size_t>> builtins={{"sum",{"nat::sum",1}},{"average",{"nat::average",1}},{"avg",{"nat::average",1}},{"max",{"nat::maximum",1}},{"min",{"nat::minimum",1}},{"length",{"nat::length",1}},{"read_file",{"nat::read_file",1}},{"ping",{"nat::ping",1}}};
+                const std::map<string,std::pair<string,size_t>> builtins={
+                    {"sum",{"nat::sum",1}},{"somma",{"nat::sum",1}},{"average",{"nat::average",1}},{"media",{"nat::average",1}},{"avg",{"nat::average",1}},
+                    {"max",{"nat::maximum",1}},{"massimo",{"nat::maximum",1}},{"min",{"nat::minimum",1}},{"minimo",{"nat::minimum",1}},
+                    {"length",{"nat::length",1}},{"lunghezza",{"nat::length",1}},{"read_file",{"nat::read_file",1}},{"ping",{"nat::ping",1}},
+                    {"abs",{"nat::absolute",1}},{"assoluto",{"nat::absolute",1}},{"sqrt",{"nat::square_root",1}},{"radice",{"nat::square_root",1}},
+                    {"cbrt",{"nat::cube_root",1}},{"radice_cubica",{"nat::cube_root",1}},
+                    {"round",{"nat::round_number",1}},{"arrotonda",{"nat::round_number",1}},
+                    {"floor",{"nat::floor_number",1}},{"arrotonda_giu",{"nat::floor_number",1}},
+                    {"ceil",{"nat::ceil_number",1}},{"arrotonda_su",{"nat::ceil_number",1}},
+                    {"ln",{"nat::natural_log",1}},{"log",{"nat::natural_log",1}},{"log10",{"nat::decimal_log",1}},
+                    {"exp",{"nat::exponential",1}},{"sin",{"nat::sine",1}},{"seno",{"nat::sine",1}},
+                    {"cos",{"nat::cosine",1}},{"coseno",{"nat::cosine",1}},
+                    {"tan",{"nat::tangent",1}},{"tangente",{"nat::tangent",1}},
+                    {"asin",{"nat::arc_sine",1}},{"acos",{"nat::arc_cosine",1}},{"atan",{"nat::arc_tangent",1}},
+                    {"factorial",{"nat::factorial",1}},{"fattoriale",{"nat::factorial",1}},
+                    {"sign",{"nat::sign",1}},{"segno",{"nat::sign",1}},
+                    {"pow",{"nat::power",2}},{"potenza",{"nat::power",2}},
+                    {"percent",{"nat::percent",2}},{"percentuale",{"nat::percent",2}},
+                    {"atan2",{"nat::arc_tangent2",2}},
+                    {"clamp",{"nat::clamp",3}},{"limita",{"nat::clamp",3}}
+                };
                 string callee;
                 if(auto it=builtins.find(low);it!=builtins.end()) {if(args.size()!=it->second.second)throw Error("Line "+std::to_string(line)+": wrong argument count for "+t.text);callee=it->second.first;}
                 else if(auto it=funcs.find(t.text);it!=funcs.end()){if(args.size()!=it->second)throw Error("Line "+std::to_string(line)+": wrong argument count for "+t.text);callee="fn_"+t.text;}
@@ -219,7 +334,7 @@ struct Expr {
             else {if(!vars.count(t.text))throw Error("Line "+std::to_string(line)+": unknown variable '"+t.text+"' (use quotes for text)");lhs="nat::get(v_"+t.text+","+cppQuote(t.text)+")";}
         }
         else if(t.type==T::Op&&(t.text=="-"||t.text=="not"||t.text=="+")) {
-            auto rhs=expr(6);lhs=t.text=="not"?"nat::Value(!nat::truth("+rhs+"))":(t.text=="-"?"nat::Value(-nat::number("+rhs+"))":"nat::Value(nat::number("+rhs+"))");
+            auto rhs=expr(t.text=="not"?6:7);lhs=t.text=="not"?"nat::Value(!nat::truth("+rhs+"))":(t.text=="-"?"nat::Value(-nat::number("+rhs+"))":"nat::Value(nat::number("+rhs+"))");
         }
         else if(t.type==T::LParen){lhs=expr();expect(T::RParen);}
         else if(t.type==T::LBracket){
@@ -228,11 +343,11 @@ struct Expr {
             for(size_t i=0;i<items.size();++i){if(i)lhs+=",";lhs+=items[i];}lhs+="})";
         }
         else throw Error("Line "+std::to_string(line)+": expected expression, got '"+t.text+"'");
-        while(peek().type==T::Op&&prec(peek().text)>=minp){string op=take().text;int p=prec(op);string rhs=expr(p+1);
+        while(peek().type==T::Op&&prec(peek().text)>=minp){string op=take().text;int p=prec(op);string rhs=expr(p+((op=="^"||op=="**")?0:1));
             if(op=="and"||op=="or")lhs="nat::Value(nat::truth("+lhs+") "+string(op=="and"?"&&":"||")+" nat::truth("+rhs+"))";
             else if(op=="=="||op=="!=")lhs="nat::Value("+string(op=="!="?"!":"")+"nat::eq("+lhs+","+rhs+"))";
             else if(op=="<"||op==">"||op=="<="||op==">=")lhs="nat::Value(nat::cmp("+lhs+","+rhs+")"+op+"0)";
-            else {string fn=op=="+"?"add":op=="-"?"sub":op=="*"?"mul":op=="/"?"div":"mod";lhs="nat::"+fn+"("+lhs+","+rhs+")";}
+            else {string fn=op=="+"?"add":op=="-"?"sub":op=="*"?"mul":op=="/"?"div":(op=="^"||op=="**")?"power":"mod";lhs="nat::"+fn+"("+lhs+","+rhs+")";}
         }
         return lhs;
     }
@@ -286,7 +401,7 @@ struct Emit {
         return out;
     }
     string generate() {
-        string out="// NatLang 0.2 | Generated C++20. Review generated code before distributing.\n";
+        string out="// NatLang 0.3 | Generated C++20. Review generated code before distributing.\n";
         out+=NAT_RUNTIME;out+="\n";
         for(const auto &n:program)if(n.kind==K::Function){out+="nat::Value fn_"+n.a+"(";for(size_t i=0;i<n.params.size();++i){if(i)out+=",";out+="nat::Value v_"+n.params[i];}out+=");\n";}
         for(const auto &n:program)if(n.kind==K::Function) {
@@ -339,7 +454,7 @@ static string shellQuote(const string &s) {
 }
 static string llm(const string &source,const string &url) {
     if(!std::regex_match(url,std::regex(R"(http://(?:127\.0\.0\.1|localhost):[0-9]{2,5}/v1/chat/completions)")))throw Error("--llm-url must be a localhost llama-server /v1/chat/completions endpoint");
-    const string rules=R"(Translate English/Italian natural-language program into NatLang v0.2. Reply ONLY JSON with key program. Never guess missing information. NatLang line format:
+    const string rules=R"(You are NatLang's multilingual semantic frontend. Translate programs written in Italian, English, Spanish, French, or German into CANONICAL NatLang v0.3 instructions. Output ONLY JSON object {"program":"..."}, no explanations. Preserve all steps, variable names, observable effects, loops and nesting. Do NOT invent missing intent; preserve unknown instructions unchanged so the parser fails visibly. Use the simplest supported canonical forms. Standardize structured blocks with End. NatLang line format:
 Set x to EXPR
 Show EXPR
 EXPR (bare expressions are printed)
@@ -362,7 +477,7 @@ Repeat N times\n...\nEnd
 Define a function called name with parameter x\nReturn EXPR\nEnd
 Save EXPR to file "path"
 Load file "path" into x
-Expressions: numbers, quoted strings, true/false, variables, arithmetic + - * / %, comparisons == != < > <= >=, boolean and/or/not, [items], max(list), min(list), sum(list), average(list), length(list), name(args). Always quote literal text. Use END to close each block. If source cannot be represented, leave offending instruction untouched so compiler fails visibly. Preserve intended behavior. Output canonical program without markdown.)";
+Expressions: decimal numbers, quoted strings, true/false, pi/euler, variables; arithmetic + - * / % ^ ** (right-associative exponent), comparisons == != < > <= >=, boolean and/or/not; lists [items], math sqrt, cbrt, abs, round, floor, ceil, ln, log10, exp, sin, cos, tan, factorial, pow, percent(a,b), clamp(x,min,max); max(list), min(list), sum(list), average(list), length(list), name(args). Translate arithmetic paraphrases as expressions, e.g. "quanto fa 2 più 2" -> "Show 2 + 2", "Wie viel ist 2 plus 2?" -> "Show 2 + 2", "demande un nombre" -> "Ask user for a number and store in answer". Avoid code fences. Never output arbitrary C++ or shell commands. Always quote literal text. Use END to close each block. If source cannot be represented, leave offending instruction untouched so compiler fails visibly. Preserve intended behavior. Output canonical program without markdown.)";
     string request="{\"model\":\"local-model\",\"temperature\":0,\"seed\":42,\"stream\":false,\"max_tokens\":2400,\"messages\":[{\"role\":\"system\",\"content\":"+cppQuote(rules)+"},{\"role\":\"user\",\"content\":"+cppQuote(source)+"}],\"response_format\":{\"type\":\"json_schema\",\"schema\":{\"type\":\"object\",\"properties\":{\"program\":{\"type\":\"string\"}},\"required\":[\"program\"],\"additionalProperties\":false}}}";
     const auto id=std::chrono::steady_clock::now().time_since_epoch().count();const auto base=fs::temp_directory_path()/("natc-"+std::to_string(id));
     const fs::path req=base.string()+".request.json",resp=base.string()+".response.json";
@@ -384,25 +499,45 @@ static void explain(const std::vector<Node> &nodes,int depth=0) {
         if(!n.otherwise.empty()){std::cout<<string(static_cast<size_t>(depth)*2+2,' ')<<"else\n";explain(n.otherwise,depth+1);}
     }
 }
+// Inspectable shared statement IR (independent of the input language).
+static string irJSON(const std::vector<Node> &nodes) {
+    string out="[";
+    for(size_t i=0;i<nodes.size();++i) {
+        const auto &n=nodes[i];if(i)out+=",";
+        out+="{\"kind\":"+cppQuote(kindName(n.kind))+",\"line\":"+std::to_string(n.line);
+        out+=",\"a\":"+cppQuote(n.a)+",\"b\":"+cppQuote(n.b)+",\"c\":"+cppQuote(n.c);
+        out+=",\"parameters\":[";
+        for(size_t j=0;j<n.params.size();++j){if(j)out+=",";out+=cppQuote(n.params[j]);}
+        out+="],\"body\":"+irJSON(n.body)+",\"otherwise\":"+irJSON(n.otherwise)+"}";
+    }
+    return out+"]";
+}
 static void help() {
-    std::cout<<"NatLang compiler v0.2 (C++20)\n"
+    std::cout<<"NatLang compiler v0.3 (C++20)\n"
     <<"  natc source.nat [-o output] [--compiler clang++|g++|cl]\n"
     <<"  natc source.nat --emit-cpp [generated.cpp]\n"
     <<"  natc source.nat --check [--explain]\n"
+    <<"  natc source.nat --emit-ir [program.ir.json]\n"
     <<"  natc source.nat --llm [--llm-url http://127.0.0.1:8080/v1/chat/completions]\n"
     <<"  natc source.nat --llm-all  (always normalize using local model)\n"
     <<"  natc --eval \"2 plus 2\"  (compile and execute an expression immediately)\n"
-    <<"Flags: --keep-cpp (retain generated source), --show-normalized, --help\n";
+    <<"Flags: --keep-cpp, --show-normalized, --opt-level 0..3 (default 2), --help\n";
 }
 int main(int argc,char **argv) {
     try {
         if(argc<2){help();return 1;}
-        fs::path source,output,cpp;string compiler="",url="http://127.0.0.1:8080/v1/chat/completions",evalCode;
-        bool emit=false,check=false,exp=false,useLLM=false,forceLLM=false,keep=false,showNormalized=false,eval=false;
+        fs::path source,output,cpp,irOutput;string compiler="",url="http://127.0.0.1:8080/v1/chat/completions",evalCode;
+        bool emit=false,emitIR=false,check=false,exp=false,useLLM=false,forceLLM=false,keep=false,showNormalized=false,eval=false;
+        int optimize=2;
         for(int i=1;i<argc;++i) {
             string a=argv[i];if(a=="--help"||a=="-h"){help();return 0;}
             else if(a=="-o"){if(++i==argc)throw Error("-o requires output path");output=argv[i];}
             else if(a=="--compiler"){if(++i==argc)throw Error("--compiler requires compiler name");compiler=argv[i];}
+            else if(a=="--opt-level"){
+                if(++i==argc)throw Error("--opt-level requires a number from 0 to 3");
+                string level=argv[i];if(level.size()!=1||level[0]<'0'||level[0]>'3')throw Error("--opt-level must be 0, 1, 2 or 3");
+                optimize=level[0]-'0';
+            }
             else if(a=="--llm-url"){if(++i==argc)throw Error("--llm-url requires URL");url=argv[i];}
             else if(a=="--eval"||a=="-e"){if(++i==argc)throw Error("--eval requires a NatLang expression");evalCode=argv[i];eval=true;}
             else if(a=="--llm"){useLLM=true;}
@@ -412,6 +547,7 @@ int main(int argc,char **argv) {
             else if(a=="--check"){check=true;}
             else if(a=="--explain"){exp=true;}
             else if(a=="--emit-cpp"){emit=true;if(i+1<argc&&argv[i+1][0]!='-')cpp=argv[++i];}
+            else if(a=="--emit-ir"){emitIR=true;if(i+1<argc&&argv[i+1][0]!='-')irOutput=argv[++i];}
             else if(!a.empty()&&a[0]=='-')throw Error("Unknown flag: "+a);
             else if(source.empty())source=a;
             else throw Error("Unexpected argument: "+a);
@@ -434,6 +570,7 @@ int main(int argc,char **argv) {
         else {try{compile();}catch(const Error &e){if(!useLLM)throw;std::cerr<<"Deterministic frontend: "<<e.what()<<"\nTrying local LLM...\n";program=llm(original,url);compile();}}
         if(showNormalized&&program!=original)std::cout<<"--- Normalized by local LLM ---\n"<<program<<"\n--- End normalized ---\n";
         if(exp)explain(ast);
+        if(emitIR){const string payload=irJSON(ast)+"\n";if(irOutput.empty())std::cout<<payload;else{write(irOutput,payload);std::cout<<"Statement IR written to "<<irOutput.string()<<"\n";}return 0;}
         if(check){std::cout<<"OK: "+std::to_string(ast.size())+" top-level statements\n";return 0;}
         if(cpp.empty()){cpp=source;cpp.replace_extension(".generated.cpp");}
         write(cpp,generated);
@@ -455,9 +592,9 @@ int main(int argc,char **argv) {
         }
         string cmd;
         const auto base=lower(fs::path(compiler).filename().string());
-        if(base=="cl"||base=="cl.exe")cmd=shellQuote(compiler)+" /nologo /std:c++20 /utf-8 /EHsc /Fe:"+shellQuote(output.string())+" "+shellQuote(cpp.string());
+        if(base=="cl"||base=="cl.exe")cmd=shellQuote(compiler)+" /nologo /std:c++20 /utf-8 /EHsc "+string(optimize==0?"/Od":optimize==1?"/O1":"/O2")+" /Fe:"+shellQuote(output.string())+" "+shellQuote(cpp.string());
         else {
-            cmd=shellQuote(compiler)+" -std=c++20 -O2 "+shellQuote(cpp.string())+" -o "+shellQuote(output.string());
+            cmd=shellQuote(compiler)+" -std=c++20 -O"+std::to_string(optimize)+" "+shellQuote(cpp.string())+" -o "+shellQuote(output.string());
 #ifdef _WIN32
             cmd+=" -liphlpapi -lws2_32";
 #else

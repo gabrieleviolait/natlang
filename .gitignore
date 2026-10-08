@@ -14,3 +14,7 @@ results.txt
 *.dll
 *.lib
 *.exp
+
+# Separate fast/debug CMake tree
+build-fast/
+**/__pycache__/

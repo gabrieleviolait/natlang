@@ -1,4 +1,4 @@
-// NatLang runtime v0.2 — embedded in generated C++ translation units.
+// NatLang runtime v0.3 — embedded in generated C++ translation units.
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -94,6 +94,62 @@ inline Value mod(const Value &a, const Value &b) {
     double n = number(b); if (n == 0) throw std::runtime_error("Modulo by zero");
     return std::fmod(number(a), n);
 }
+// Numerical operations share a single language-independent runtime.
+inline Value finite_result(double x) {
+    if (!std::isfinite(x)) throw std::runtime_error("Non-finite numerical result");
+    return x;
+}
+inline Value power(const Value &a, const Value &b) {
+    const double base=number(a), exponent=number(b);
+    if (base==0 && exponent<0) throw std::runtime_error("Zero cannot have a negative exponent");
+    if (base<0 && std::floor(exponent)!=exponent) throw std::runtime_error("Negative base with fractional exponent");
+    return finite_result(std::pow(base,exponent));
+}
+inline Value square_root(const Value &v) {
+    double x=number(v); if (x<0) throw std::runtime_error("Square root of negative number");
+    return finite_result(std::sqrt(x));
+}
+inline Value cube_root(const Value &v) {return finite_result(std::cbrt(number(v)));}
+inline Value absolute(const Value &v) {return finite_result(std::fabs(number(v)));}
+inline Value round_number(const Value &v) {return finite_result(std::round(number(v)));}
+inline Value floor_number(const Value &v) {return finite_result(std::floor(number(v)));}
+inline Value ceil_number(const Value &v) {return finite_result(std::ceil(number(v)));}
+inline Value natural_log(const Value &v) {
+    double x=number(v); if (x<=0) throw std::runtime_error("Logarithm requires a positive argument");
+    return finite_result(std::log(x));
+}
+inline Value decimal_log(const Value &v) {
+    double x=number(v); if (x<=0) throw std::runtime_error("Logarithm requires a positive argument");
+    return finite_result(std::log10(x));
+}
+inline Value exponential(const Value &v) {return finite_result(std::exp(number(v)));}
+// Trigonometric arguments and results use radians.
+inline Value sine(const Value &v) {return finite_result(std::sin(number(v)));}
+inline Value cosine(const Value &v) {return finite_result(std::cos(number(v)));}
+inline Value tangent(const Value &v) {return finite_result(std::tan(number(v)));}
+inline Value arc_sine(const Value &v) {
+    double x=number(v);if(x<-1||x>1)throw std::runtime_error("asin domain is [-1, 1]");
+    return finite_result(std::asin(x));
+}
+inline Value arc_cosine(const Value &v) {
+    double x=number(v);if(x<-1||x>1)throw std::runtime_error("acos domain is [-1, 1]");
+    return finite_result(std::acos(x));
+}
+inline Value arc_tangent(const Value &v) {return finite_result(std::atan(number(v)));}
+inline Value arc_tangent2(const Value &a,const Value &b) {return finite_result(std::atan2(number(a),number(b)));}
+inline Value factorial(const Value &v) {
+    double x=number(v);
+    if (x<0||x>170||std::floor(x)!=x)throw std::runtime_error("Factorial requires an integer from 0 to 170");
+    double result=1;for(int i=2;i<=static_cast<int>(x);++i)result*=i;
+    return finite_result(result);
+}
+inline Value percent(const Value &rate,const Value &amount) {return finite_result(number(rate)*number(amount)/100.0);}
+inline Value clamp(const Value &v,const Value &lo,const Value &hi) {
+    double x=number(v),a=number(lo),b=number(hi);
+    if(a>b)throw std::runtime_error("clamp requires min <= max");
+    return finite_result(std::clamp(x,a,b));
+}
+inline Value sign(const Value &v) {double x=number(v);return static_cast<double>((x>0)-(x<0));}
 inline bool eq(const Value &a, const Value &b) {
     if (a.data.index() != b.data.index()) return false;
     if (auto p = std::get_if<double>(&a.data)) return *p == std::get<double>(b.data);

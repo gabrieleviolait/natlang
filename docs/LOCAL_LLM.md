@@ -1,48 +1,37 @@
-# Optional local LLM normalization
+# Optional local LLM normalization (NatLang v0.3)
 
-## Goal
+NatLang uses a small LLM **only as an optional natural-language frontend**; it does not generate arbitrary C++ from an unreviewed user request. Inference is local through a `llama.cpp` compatible chat-completions endpoint. This repo does **not** include a GGUF file, model training pipeline, or a model-quality guarantee.
 
-Use a small language model only as a **natural-language frontend**. The output is constrained to canonical NatLang text, not arbitrary C++ or executable shell commands. The normal compiler parses and validates that text before emitting machine code.
+## Setup
 
-## Current implementation
+Install `llama.cpp` / `llama-server` separately, choose an instruction-tuned GGUF whose license you have checked, and start:
 
-`natc` currently calls an OpenAI-compatible `/v1/chat/completions` HTTP endpoint on **127.0.0.1 or localhost only**, with a JSON-schema response format requiring `{"program":"..."}`. It relies on the local `curl` executable and a previously started `llama.cpp` `llama-server` instance.
-
-```bash
+```sh
 llama-server -m /path/to/instruct-model.gguf --host 127.0.0.1 --port 8080 -c 4096
-natc examples/free_form_llm.nat --llm --show-normalized --keep-cpp -o free_form
 ```
 
-Use `--llm` for fallback-only normalization, `--llm-all` to always normalize, or `--llm-url http://127.0.0.1:8081/v1/chat/completions` for a custom loopback port. **No model files are included** and no particular model is known to be reliable for this task yet.
+Then:
 
-### Prompt protocol
-
-The system prompt enumerates supported NatLang constructs and asks the model to preserve behavior, write literal strings in quotes, use `End`, and leave unsupported instructions unmodified to trigger a visible parser failure. The request uses `temperature=0`; that does not imply perfect determinism or semantic accuracy.
-
-Example model response body:
-
-```json
-{
-  "choices": [{
-    "message": {
-      "content": "{\"program\":\"Set x to 7\\nShow x + 3\"}"
-    }
-  }]
-}
+```sh
+natc examples/free_form_multilingual.nat --llm-all --show-normalized --keep-cpp -o demo
+natc your_program.nat --llm --show-normalized -o app
+natc your_program.nat --llm-url http://127.0.0.1:8081/v1/chat/completions --llm -o app
 ```
 
-## Trust boundary
+- `--llm`: fallback only when deterministic compilation fails.
+- `--llm-all`: always normalize, including potentially misleading statements that happen to parse.
+- `--show-normalized`: print the model's canonical program, for semantic review.
+- `--emit-ir`: inspect the validated shared statement IR (use in a separate compilation command).
+- `--keep-cpp` / `--emit-cpp`: inspect the native C++ output.
 
-A model can return a syntactically valid but **incorrect program**. The current compiler checks grammar and referenced names, **not equivalence to the user's intent**. Keep `--show-normalized` on when experimenting. Review generated C++ with `--emit-cpp`/`--keep-cpp`, run tests, and do not compile untrusted natural-language prompts with important file privileges.
+The model must return an OpenAI-compatible response with JSON-encoded `choices[0].message.content` containing JSON `{"program":"canonical NatLang source"}`. NatLang requests a schema-constrained JSON response and `temperature=0`. This does **not** guarantee correctness or deterministic inference across backends. `curl` is required, URLs must point to localhost/127.0.0.1, and there is no automatic cloud fallback.
 
-The adapter is not a secure sandbox and does not provide formal verification. Loopback-only requests prevent accidentally targeting a cloud endpoint, but prompts still leave `natc` for the chosen local server process.
+## Multilingual scope
 
-## Benchmark and training plan (future)
+The normalization prompt supports **Italian, English, Spanish, French and German** instructions and attempts to map them to the **same** canonical NatLang syntax. Deterministic IT/EN works without any model; the listed additional languages currently have only a subset of rule-based commands. General prose, unrecognized spellings, compound requests and ambiguous meaning require the model and may fail.
 
-1. Create a corpus of natural requests with canonical NatLang examples and expected observable behavior.
-2. Split by *task family* (not random near-duplicates), and include ambiguous/invalid requests.
-3. Evaluate exact AST match, execution-based equivalence, refusal/uncertainty accuracy and latency.
-4. Compare deterministic-only, tiny models (~0.3B–0.6B), somewhat larger local models, and potential fine-tuning.
-5. Add per-block compilation, semantic-cache keys and an inspectable ambiguity report before claiming syntax freedom.
+## Security and evaluation
 
-The important optimization target is **semantic correctness per unit of model memory and time**, not model size alone.
+LLM output is parsed and name-checked, but semantic fidelity to the natural-language request is **not verified**. Always inspect code and test program outputs before running important tasks. Compile untrusted programs with minimal OS permissions and in a sandbox. Free-form requests can contain ambiguous demands, invented variable names or unsupported concepts. The project uses a fake local server for integration tests; it **does not** yet benchmark real model accuracy, memory, latency or quantized weights.
+
+Recommended next step: curate examples with verified AST and native outputs, and independently benchmark candidate local models before any fine-tuning or bundled release.

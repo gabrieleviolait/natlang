@@ -22,7 +22,7 @@ class CompilationTests(unittest.TestCase):
             src = Path(d) / "program.nat"
             exe = Path(d) / ("program.exe" if os.name == "nt" else "program")
             src.write_text(source, encoding="utf-8")
-            compilation = call(NATC, src, "-o", exe)
+            compilation = call(NATC, src, "-o", exe, "--opt-level", "0")
             self.assertEqual(compilation.returncode, 0, compilation.stdout + compilation.stderr)
             result = call(exe, input_text=stdin)
             return result
@@ -33,7 +33,7 @@ class CompilationTests(unittest.TestCase):
 
     def test_eval_directly(self):
         for expression in ('2 + 2', '2 plus 2', '2 piu 2'):
-            r = call(NATC, '--eval', expression)
+            r = call(NATC, '--eval', expression, '--opt-level', '0')
             self.assertEqual((r.returncode, r.stdout), (0, '4\n'), r.stderr)
 
     def test_ask_user_and_reuse_answer(self):
@@ -150,7 +150,7 @@ class CompilationTests(unittest.TestCase):
             src=Path(d)/'files.nat'
             exe=Path(d)/('files.exe' if os.name=='nt' else 'files')
             src.write_text('Save "Hello file" to file "out.txt"\nLoad file "out.txt" into content\nShow content\n')
-            r=call(NATC,src,'-o',exe)
+            r=call(NATC,src,'-o',exe,'--opt-level','0')
             self.assertEqual(r.returncode,0,r.stdout+r.stderr)
             outcome=subprocess.run([str(exe)],cwd=d,text=True,capture_output=True,timeout=10)
             self.assertEqual((outcome.returncode,outcome.stdout),(0,'Hello file\n'))
@@ -166,7 +166,7 @@ class CompilationTests(unittest.TestCase):
             src=Path(d)/'x.nat'
             out=Path(d)/('native.exe' if os.name=='nt' else 'native')
             src.write_text('Show 42')
-            r=call(NATC,src,'-o',out)
+            r=call(NATC,src,'-o',out,'--opt-level','0')
             self.assertEqual(r.returncode,0,r.stdout+r.stderr)
             self.assertTrue(out.is_file())
             with open(out,'rb') as f: prefix=f.read(4)
@@ -193,7 +193,7 @@ class CompilationTests(unittest.TestCase):
                 src=Path(d)/'text.nat';exe=Path(d)/'app'
                 if os.name=='nt':exe=exe.with_suffix('.exe')
                 src.write_text('please compute something')
-                r=call(NATC,src,'--llm','--llm-url',f'http://127.0.0.1:{server.server_port}/v1/chat/completions','-o',exe)
+                r=call(NATC,src,'--llm','--llm-url',f'http://127.0.0.1:{server.server_port}/v1/chat/completions','-o',exe,'--opt-level','0')
                 self.assertEqual(r.returncode,0,r.stdout+r.stderr)
                 output=call(exe)
                 self.assertEqual((output.returncode,output.stdout),(0,'10\n'))

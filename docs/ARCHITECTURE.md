@@ -63,3 +63,10 @@ Semantic phases then become distinct: normalization -> parsing -> name resolutio
 The integration suite compiles `.nat` samples into native executables and runs them, asserts outputs, covers invalid input and diagnostics, and mocks the local llama-server endpoint. **Mock success says nothing about real LLM accuracy.**
 
 See [language reference](LANGUAGE_REFERENCE.md) and [LLM integration](LOCAL_LLM.md).
+
+
+## Multilingual v0.3 frontend
+
+The parser accepts recognized Italian/English keywords, selected Spanish/French/German aliases, and optional local-LLM-normalized canonical `.nat`. They all converge on the same `Node` statement IR, same expression checking, embedded runtime and native C++20 backend; there is **no language-specific backend**. Inspect with `--emit-ir`. The current statement IR is not a fully typed expression AST; see [SEMANTIC_IR.md](SEMANTIC_IR.md).
+
+Math operators and aliases compile to language-neutral `nat::` runtime functions; error handling is implemented in the generated executable, independently of the LLM. See [MATH.md](MATH.md).

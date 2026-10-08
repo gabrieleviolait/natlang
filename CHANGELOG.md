@@ -1,25 +1,24 @@
 # Changelog
 
-## 0.2.0 — 2026-10-08
+## v0.3.0 — Multilingual and mathematical language (2026-10-08)
 
-- Bare mathematical expressions now print their result: `2 + 2`, `2 plus 2`, `2 piu 2` and `2 più 2` produce `4`.
-- `natc --eval "2 plus 2"` compiles and immediately executes a native one-line program.
-- Interactive prompts: `Ask user`, `Ask user "Question? " and store in name`, `Chiedi all'utente`, `Chiedi ad utente un numero e salva in eta`.
-- `Scan IP <IPv4>`, `Scan this ip`, `Scan network`, `ping(address)`: IPv4-only ICMP reachability with strict validation and limited private-LAN discovery.
-- Cross-platform interface discovery (Windows, Linux, macOS source support), bounded concurrent ping probes, validation against shell injection; portable Windows runtime linkage added for GCC/Clang.
-- New examples and integration tests; prior English input forms remain backward compatible.
+- Expanded the same C++20 compiler frontend with richer **Italian and English** constructs, comparisons, list/file statements and math expressions.
+- Experimental basic statement vocabulary in **Spanish, French and German**, with a shared statement IR and no separate backend per language.
+- Mathematics: `^`, `**` (right-associative), percentage of amount, roots, absolute value, rounding, log/exp, trigonometry, factorial, range clipping and Italian builtin aliases.
+- Expression synonyms: `2 plus 2`, `2 più 2`, `5 per 4`, `7 diviso 2`, `2 elevato a 5`, `15 per cento di 200` and more.
+- Additional runtime checks for invalid exponent domains, square roots, logarithms, factorials and other non-finite mathematical results.
+- `--emit-ir` outputs inspectable statement-level JSON; all recognized languages share the same IR and C++ code generator.
+- Expanded the local LLM normalization prompt for five input languages; no model included, quality is model-dependent.
+- Added multilingual/math examples, reference guides and end-to-end tests.
+- Research prototype: not a universal syntax-free or fully fluent five-language compiler.
 
-**Limitations:** network reachability is ICMP-only, and blocking ICMP can look like nonresponse; LAN scan checks at most two local /24 slices. Features remain experimental.
+## v0.2.0
 
+- Native single-expression evaluation (`--eval`), direct expression statements and basic word arithmetic.
+- Interactive Italian/English text and number prompts.
+- Bounded local private IPv4 ICMP discovery and explicit single-IP probing.
 
-## 0.1.0 — 2026-10-08
+## v0.1.0
 
-Initial experimental source distribution:
-
-- C++20 `natc` frontend for a restricted English-like `.nat` language.
-- Native code generation via host C++ compiler, with small embedded `nat::Value` runtime.
-- Variables, expressions, conditions, loops, functions, lists, text/numeric input, and files.
-- Optional loopback llama-server normalization adapter (model not included).
-- Example programs, end-to-end tests, platform build scripts, architecture, vision and language documentation.
-
-**Limitations:** not syntax-free, not feature-complete general-purpose programming, no integrated/fine-tuned model. See [README.md](README.md).
+- First native C++20 compiler prototype with statements, expressions, control flow, functions, lists and files.
+- Local LLM adapter and integration test harness.
