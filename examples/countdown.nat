@@ -1,7 +1,0 @@
-# No LLM needed for this program.
-Set counter to 5
-Repeat until counter is 0
-    Show counter
-    Decrease counter by 1
-End
-Show "Done!"

@@ -1,10 +1,10 @@
-# NatLang Studio Easy — one installer or portable ZIP (Windows 10/11 x64)
+# NatLang Studio Easy v0.5.1 — one installer or portable ZIP (Windows 10/11 x64)
 
 NatLang Studio Easy is a *desktop frontend* to the same open-source C++20 `natc` compiler. You can use it without Git, CMake, Visual Studio, Python, or a cloud service. The GitHub Actions package includes a portable **llvm-mingw Clang C++ toolchain**, so native compilation does not require a separate SDK installation.
 
 ## Start in 3 steps
 
-1. In GitHub [Actions → NatLang Studio Easy](https://github.com/gabrieleviolait/natlang/actions/workflows/easy-windows.yml), open the most recent **successful** run and download the Windows artifact, or download the published release assets if present. (Artifacts require GitHub sign-in; a Release can be downloaded without sign-in.)
+1. Visit the public [Releases page](https://github.com/gabrieleviolait/natlang/releases) and download the **Easy Setup EXE** or **Easy ZIP**, plus optional SHA256SUMS. If no release assets are present yet, open [Actions → Windows packages](https://github.com/gabrieleviolait/natlang/actions/workflows/easy-windows.yml) and check for a successful build. GitHub Actions artifacts require GitHub sign-in; Releases are public.
 2. Run `NatLang-Studio-Easy-Setup.exe` (per-user installer, no admin rights required), **or** extract `NatLang-Studio-Easy-Windows-x64.zip` and launch `natlang-studio.exe`.
 3. Type `Mostra 2 più 2`; click **Esegui** to compile into a native executable and see `4` in the output area. Click **Salva** to keep your `.nat` file.
 

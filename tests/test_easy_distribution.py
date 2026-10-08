@@ -25,6 +25,11 @@ class EasyDistribution(unittest.TestCase):
         for feature in ("llvm-mingw", "llama-server.exe", "natlang-studio.exe", "include_model", "NatLang-Studio-Easy-Setup.exe", "actions/upload-artifact@v4"):
             with self.subTest(feature=feature): self.assertIn(feature, flow)
 
+    def test_release_build_and_portable_smoke(self):
+        flow = (ROOT / ".github/workflows/easy-windows.yml").read_text(encoding="utf-8")
+        for feature in ("Verify portable compilation WITHOUT Visual Studio", "Get-FileHash", "gh release upload", "gh release create", "--clobber", "if-no-files-found: error", "NATLANG_VERSION: '0.5.1'"):
+            with self.subTest(feature=feature): self.assertIn(feature, flow)
+
     def test_installer_and_docs_exist(self):
         iss = (ROOT / "dist/NatLang.iss").read_text(encoding="utf-8")
         self.assertIn("PrivilegesRequired=lowest", iss)

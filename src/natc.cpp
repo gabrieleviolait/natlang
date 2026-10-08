@@ -554,7 +554,7 @@ static string irJSON(const std::vector<Node> &nodes) {
     return out+"]";
 }
 static void help() {
-    std::cout<<"NatLang compiler v0.4 (C++20)\n"
+    std::cout<<"NatLang compiler v0.5.1 (C++20)\n"
     <<"  natc source.nat [-o output] [--compiler clang++|g++|cl]\n"
     <<"  natc source.nat --emit-cpp [generated.cpp]\n"
     <<"  natc source.nat --check [--explain]\n"

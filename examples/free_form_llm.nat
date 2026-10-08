@@ -1,2 +1,0 @@
-# Requires local model: natc examples/free_form_llm.nat --llm
-Take five as the starting value, then repeatedly ask me for a number until I enter ten. Finally display the starting value.

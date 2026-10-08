@@ -1,5 +1,0 @@
-# Requires --llm-all and a locally running compatible model.
-# This is intentionally NOT supported by the deterministic parser.
-Please make a small calculator that asks the user for two numbers.
-Then show their sum and the square root of the first number if nonnegative.
-# Equivalent instructions could be written in Italian or other supported model languages.

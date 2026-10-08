@@ -1,7 +1,0 @@
-Set starting to 5
-Ask the user for a number and store it in answer
-Repeat until answer equals 10
-    Show "Not yet."
-    Ask for a number and store it in answer
-End
-Show starting

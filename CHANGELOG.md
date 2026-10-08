@@ -1,12 +1,13 @@
-## [0.4.0] - 2026-10-08
-
-- Added Qwen3 small-GGUF-oriented prompt profile with multilingual few-shot examples and `/no_think`, alongside a generic profile.
-- Added `--llm-preview`, `--llm-profile` and `--llm-attempts` (bounded parser-error correction request).
-- Added loopback GGUF-server startup scripts for Windows and Unix environments.
-- Added a 59-case five-language, strict-IR evaluation corpus and reproducible benchmark CLI; deterministic baseline documented without inventing GGUF numbers.
-- Added six simulated-server integration tests. GGUF fine-tuning and real-model evaluation remain future tasks.
-
 # Changelog
+
+## v0.5.1 — Windows packaging and public download pipeline (2026-10-08)
+
+- Automatically publish installer/portable ZIP and SHA256 checksums to GitHub Releases after a successful Windows packaging workflow.
+- Verify compiled programs using the bundled LLVM-MinGW toolchain before packaging.
+- Pin llama.cpp build and keep provenance/version information; optional GGUF Full package remains selectable by manual workflow dispatch.
+- Clarify download instructions and release verification in README and Easy Start guide.
+
+
 
 ## v0.5.0 — NatLang Studio Easy (2026-10-08)
 

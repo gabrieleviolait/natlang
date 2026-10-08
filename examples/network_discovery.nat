@@ -1,5 +1,0 @@
-# IPv4 ICMP discovery (authorized networks only).
-# Does not scan ports and cannot prove an unresponsive host is offline.
-Scan IP 127.0.0.1
-Scan this ip
-Scan network

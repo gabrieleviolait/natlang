@@ -1,7 +1,0 @@
-Create a list named values
-Add 3 to values
-Append 7 into values
-Put 2 to values
-Show values
-Show "sum=" + sum(values)
-Show "length=" + length(values)

@@ -1,7 +1,7 @@
 ; NatLang Studio Easy portable distribution -> single installer EXE.
 ; Run ISCC.exe after the package payload was assembled by GitHub Actions.
 #define AppName "NatLang Studio Easy"
-#define AppVersion "0.5.0"
+#define AppVersion "0.5.1"
 [Setup]
 AppId={{944F015B-8BA9-4C05-928B-5AE8A926EC5E}
 AppName={#AppName}
