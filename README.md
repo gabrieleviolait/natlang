@@ -1,10 +1,10 @@
 # NatLang — Native Natural-Language Compiler
 
-**v0.3.0 | Multilingual frontend · native C++20 output · mathematical library · optional local LLM**
+**v0.4.0 | Multilingual frontend · native C++20 output · math · optional local GGUF frontend + benchmark**
 
 NatLang is an experimental programming-language compiler. Write programs using readable sentences in **Italian or English**, mix languages inside a file, and build a real native executable through C++20. Common Spanish, French and German statements are recognized, while an **optional, user-provided local LLM** can try to normalize less structured multilingual instructions.
 
-**Important:** This is a functional research prototype, **not** a fully syntax-free, universal natural-language compiler. No GGUF/model weights are included, and tiny model accuracy has not been validated. The deterministic frontend recognizes an explicit, documented subset. AI-generated normalized programs need review.
+**Important:** This is a functional research prototype, **not** a fully syntax-free, universal natural-language compiler. No GGUF/model weights are included, and real quantized-model accuracy has not been validated. The deterministic frontend recognizes an explicit, documented subset. AI-generated normalized programs need review.
 
 ## Try it
 
@@ -73,6 +73,20 @@ Inspect / compile:
 ./build/natc examples/bilingual_program.nat -o program --keep-cpp
 ```
 
+## Model-assisted free-form language (v0.4)
+
+NatLang now includes a small-model prompt profile (`qwen3`), schema-constrained structured responses, one bounded validation-repair retry and a **preview mode that never executes generated code**. You need a separately installed local `llama-server` and a GGUF of your choice.
+
+```powershell
+# Windows: first terminal, after winget install llama.cpp
+.\scripts\start_gguf.ps1 -Model qwen3
+# second terminal (after building natc)
+.\build\Release\natc.exe examples\gguf_free_form_italiano.nat --llm-preview
+python benchmarks\evaluate.py --natc .\build\Release\natc.exe --mode gguf --model-label Qwen3-0.6B-Q4_K_M --report qwen3-results.json
+```
+
+`--llm` only calls the model when deterministic parsing fails; `--llm-all` always normalizes; `--llm-preview` always normalizes and shows canonical source plus IR (no execution). Review the results: semantic interpretation is **not** guaranteed. [GGUF setup, benchmark and limitations](docs/GGUF_EVALUATION.md).
+
 ## Supported language constructs
 
 | Capability | Italian | English |
@@ -94,7 +108,7 @@ Inspect / compile:
 
 Quoted strings retain their original content. Blocks **currently require `Fine` or `End`**; indentation does not define blocks. Identifier names are currently ASCII, and case-sensitive.
 
-See [Language Reference](docs/LANGUAGE_REFERENCE.md), [Multilingual guide](docs/MULTILINGUAL.md) and [Examples](examples). Spanish / French / German keyword support is **partial and experimental**, not at the same deterministic coverage level as IT/EN. The local model can attempt freer variants in all five languages.
+See [GGUF Evaluation](docs/GGUF_EVALUATION.md), [Language Reference](docs/LANGUAGE_REFERENCE.md), [Multilingual guide](docs/MULTILINGUAL.md) and [Examples](examples). Spanish / French / German keyword support is **partial and experimental**, not at the same deterministic coverage level as IT/EN. The local model can attempt freer variants in all five languages.
 
 ## Mathematics
 

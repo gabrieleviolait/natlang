@@ -35,3 +35,9 @@ The normalization prompt supports **Italian, English, Spanish, French and German
 LLM output is parsed and name-checked, but semantic fidelity to the natural-language request is **not verified**. Always inspect code and test program outputs before running important tasks. Compile untrusted programs with minimal OS permissions and in a sandbox. Free-form requests can contain ambiguous demands, invented variable names or unsupported concepts. The project uses a fake local server for integration tests; it **does not** yet benchmark real model accuracy, memory, latency or quantized weights.
 
 Recommended next step: curate examples with verified AST and native outputs, and independently benchmark candidate local models before any fine-tuning or bundled release.
+
+## v0.4 enhancement
+
+Use `--llm-preview` for **model-assisted normalization without generating or running executables**, `--llm-profile qwen3|generic` to select a local prompt specialization, and `--llm-attempts 1|2` to control at most one retry when the candidate fails NatLang compilation. Default profile is `qwen3`; the generic profile omits the extra small-model examples. Both still require an external local llama.cpp-compatible server.
+
+See [GGUF setup and evaluation](GGUF_EVALUATION.md) for reproducible commands, real-vs-mock testing separation, candidate model licenses, and benchmark caveats.

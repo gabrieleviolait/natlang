@@ -18,3 +18,7 @@ results.txt
 # Separate fast/debug CMake tree
 build-fast/
 **/__pycache__/
+
+# Local benchmark outputs, quantized model files
+*-results.json
+*.gguf
