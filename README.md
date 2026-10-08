@@ -6,6 +6,308 @@ NatLang is an experimental programming-language compiler. Write programs using r
 
 **Important:** This is a functional research prototype, **not** a fully syntax-free, universal natural-language compiler. No GGUF/model weights are included, and real quantized-model accuracy has not been validated. The deterministic frontend recognizes an explicit, documented subset. AI-generated normalized programs need review.
 
+## Installazione completa da zero / Complete setup from scratch (Italiano)
+
+> **Percorso consigliato:** Windows 10/11 a 64 bit, PowerShell e Visual Studio Build Tools 2022. Non servono un modello AI, Python o una GPU per compilare ed eseguire programmi `.nat` scritti con i comandi già supportati. **C++ e CMake, invece, sono necessari:** la v0.4.0 distribuisce i sorgenti del compilatore, non un `natc.exe` precompilato. Il frontend GGUF è facoltativo.
+>
+> Tutti i comandi dei punti **2–9** vanno eseguiti nella cartella principale di `natlang`, tranne dove specificato. Copia solo il contenuto dei blocchi di codice, senza i simboli del prompt del terminale.
+
+### 1. Prerequisiti: cosa installare e cosa no
+
+| Componente | Obbligatorio? | Serve per |
+| --- | --- | --- |
+| **Git** (oppure download ZIP da GitHub) | Uno dei due | Scaricare il progetto |
+| **CMake 3.16+** | Sì | Costruire `natc` |
+| **Compilatore C++20** (MSVC, GCC, Clang) | Sì | Costruire `natc` **e** compilare i programmi `.nat` |
+| **PowerShell / terminale** | Sì | Lanciare i comandi |
+| **llama.cpp / `llama-server`** | Solo per AI | Comprendere istruzioni più libere |
+| **Modello istruito GGUF** (es. Qwen3-0.6B) | Solo per AI | Inferenza locale; i pesi non sono inclusi |
+| **`curl`** | Solo per AI | Collegare `natc` al server locale |
+| **Python 3** | Solo per i benchmark e test | Eseguire `benchmarks/evaluate.py` e la suite `unittest` |
+
+### 2. Windows: installare Git, CMake e compilatore C++
+
+Apri **PowerShell** dal menu Start e verifica se `winget` è disponibile:
+
+```powershell
+winget --version
+```
+
+Se `winget` non viene trovato, installa **App Installer** dal Microsoft Store oppure scarica Git e CMake dai siti ufficiali indicati sotto.
+
+```powershell
+winget install --id Git.Git --exact
+winget install --id Kitware.CMake --exact
+```
+
+Installa **[Visual Studio 2022 Build Tools](https://visualstudio.microsoft.com/downloads/)** (sezione *Tools for Visual Studio*) oppure Visual Studio con il workload **Desktop development with C++ / Sviluppo di applicazioni desktop con C++**. Nell'installer assicurati di includere il compilatore **MSVC C++ x64**, un **Windows SDK** e gli strumenti C++ necessari. Non è sufficiente avere soltanto Visual Studio Code: serve una vera toolchain C++.
+
+**Chiudi PowerShell e apri dal menu Start _Developer PowerShell for VS 2022_**. Da ora in poi usa quel terminale per NatLang. Controlla:
+
+```powershell
+git --version
+cmake --version
+cl
+```
+
+`cl` senza argomenti può stampare informazioni del compilatore e l'errore «no source files specified»: va bene, purché il comando sia riconosciuto. Se `cl` non esiste, riapri **Developer PowerShell** o aggiungi il workload C++ nell'installer.
+
+**Download senza Git:** apri [NatLang su GitHub](https://github.com/gabrieleviolait/natlang), seleziona **Code → Download ZIP**, estrai la cartella e aprila dal terminale (`cd "PERCORSO_DELLA_CARTELLA"`). In questo caso salta il comando `git clone` del punto seguente.
+
+### 3. Scaricare NatLang e posizionarsi nella cartella corretta
+
+In **Developer PowerShell**, esegui:
+
+```powershell
+cd $HOME
+git clone https://github.com/gabrieleviolait/natlang.git
+cd .\natlang
+Get-ChildItem
+```
+
+Devi vedere, tra gli altri, `CMakeLists.txt`, `src`, `examples`, `scripts` e `docs`. Se hai scaricato lo ZIP, esegui `cd` nella cartella **che contiene `CMakeLists.txt`**, non in `src`.
+
+Per aggiornare una copia già clonata in seguito:
+
+```powershell
+git pull --ff-only
+```
+
+### 4. Compilare NatLang da sorgente (Windows)
+
+Restando nella cartella `natlang`:
+
+```powershell
+cmake -S . -B build
+cmake --build build --config Release --parallel
+```
+
+Con il generatore Visual Studio/MSVC, il compilatore risulta normalmente qui:
+
+```powershell
+.\build\Release\natc.exe --help
+```
+
+Dovresti vedere `NatLang compiler v0.4 (C++20)` e i comandi disponibili. Se hai scelto **Ninja o MinGW**, l'eseguibile potrebbe essere invece `build\natc.exe`: verifica con `Get-ChildItem .\build -Recurse -Filter natc.exe` e usa quel percorso negli esempi successivi.
+
+Se modifichi `src` o aggiorni il repository, ricompila con `cmake --build build --config Release --parallel`.
+
+### 5. Prima prova: calcolatrice senza creare file
+
+Questo comando **compila temporaneamente un programma nativo, lo esegue e mostra il risultato**:
+
+```powershell
+.\build\Release\natc.exe --eval "2 + 2"
+.\build\Release\natc.exe --eval "2 plus 2"
+.\build\Release\natc.exe --eval "2 più 2"
+.\build\Release\natc.exe --eval "2 elevato a 5"
+```
+
+Risultati attesi, nell'ordine: `4`, `4`, `4`, `32`. Per una compilazione di sviluppo più rapida aggiungi `--opt-level 0` (es. `--eval "2 + 2" --opt-level 0`). **Non occorre avviare alcun server AI.**
+
+### 6. Creare il primo programma `.nat` e ottenere un EXE
+
+Puoi partire da un esempio già incluso, evitando errori di sintassi:
+
+```powershell
+.\build\Release\natc.exe .\examples\hello.nat --check
+.\build\Release\natc.exe .\examples\hello.nat -o .\hello.exe --compiler cl
+.\hello.exe
+```
+
+Per scrivere il tuo programma, nella cartella principale apri Blocco note:
+
+```powershell
+notepad .\mio_programma.nat
+```
+
+Inserisci il testo seguente e salva il file **come testo UTF-8 con estensione `.nat`** (non `.nat.txt`):
+
+```text
+Mostra "Ciao, NatLang!"
+Chiedi all'utente un numero e salva in x
+Se x è maggiore di 10
+    Mostra "Il numero è maggiore di 10"
+Altrimenti
+    Mostra "Il numero è 10 o meno"
+Fine
+Mostra x * 2
+```
+
+Quindi, dal terminale:
+
+```powershell
+.\build\Release\natc.exe .\mio_programma.nat --check --explain
+.\build\Release\natc.exe .\mio_programma.nat -o .\mio_programma.exe --compiler cl
+.\mio_programma.exe
+```
+
+Scrivi un numero quando appare la richiesta. L'eseguibile **non richiede NatLang né il modello GGUF per girare**; possono comunque essere richieste le librerie di sistema/runtime della toolchain C++ usata per compilarlo.
+
+**Nota sulla sintassi:** nella v0.4.0 un blocco `Se`, `Ripeti`, `Mentre` o `Funzione` deve essere chiuso da `Fine` oppure `End`. Le frasi totalmente arbitrarie non sono ancora comprese senza AI, e nemmeno l'AI garantisce un'interpretazione corretta.
+
+### 7. Strumenti utili del compilatore
+
+```powershell
+# Controlla il programma senza creare un eseguibile
+.\build\Release\natc.exe .\examples\bilingual_program.nat --check --explain
+
+# Mostra sul terminale la rappresentazione intermedia comune (IR)
+.\build\Release\natc.exe .\examples\bilingual_program.nat --emit-ir
+
+# Salva il C++20 generato senza compilare un EXE
+.\build\Release\natc.exe .\examples\bilingual_program.nat --emit-cpp .\generated.cpp
+
+# Compila più velocemente durante gli esperimenti
+.\build\Release\natc.exe .\examples\multilingual_math.nat -o .\math.exe --compiler cl --opt-level 0
+.\math.exe
+```
+
+Riferimenti: [linguaggio](docs/LANGUAGE_REFERENCE.md), [matematica](docs/MATH.md), [multilingua](docs/MULTILINGUAL.md), [IR](docs/SEMANTIC_IR.md).
+
+### 8. Facoltativo: installare `llama.cpp` e avviare un piccolo modello GGUF
+
+Questo passaggio è necessario **solo** per usare `--llm`, `--llm-all` o `--llm-preview`. Il modello è eseguito **localmente** durante la traduzione, non dentro il programma EXE risultante. Prima di usarlo per file o rete, controlla sempre che il programma interpretato faccia davvero ciò che volevi.
+
+In una normale finestra PowerShell:
+
+```powershell
+winget install llama.cpp
+```
+
+Riapri il terminale e verifica:
+
+```powershell
+llama-server --help
+curl.exe --version
+```
+
+Se `llama-server` non è disponibile, controlla il `PATH` e consulta l'[installazione ufficiale di llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/install.md). Puoi usare anche una versione precompilata scaricata dalle [release ufficiali](https://github.com/ggml-org/llama.cpp/releases). Se `curl.exe` manca, installalo separatamente prima di usare le funzioni LLM.
+
+**Terminale 1 — server AI (da lasciare aperto):** torna alla cartella `natlang` e avvia:
+
+```powershell
+.\scripts\start_gguf.ps1 -Model qwen3
+```
+
+Lo script usa `llama-server` su `127.0.0.1:8080`, con un modello **Qwen3-0.6B Q4_K_M** disponibile su Hugging Face; al primo avvio i pesi possono essere scaricati automaticamente e occorre attendere che il server li abbia caricati. Nessun modello è incluso nel repository NatLang. Il download richiede connessione Internet, mentre l'inferenza successiva può avvenire offline se i pesi sono disponibili nella cache.
+
+Se PowerShell blocca lo script per la execution policy, **senza modificare permanentemente le impostazioni di sistema** puoi avviarlo così:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start_gguf.ps1 -Model qwen3
+```
+
+**Terminale 2 — usa NatLang (sempre dalla cartella `natlang`):**
+
+```powershell
+# Anteprima di ciò che ha capito il modello: non esegue programmi
+.\build\Release\natc.exe .\examples\gguf_free_form_italiano.nat --llm-preview
+
+# Compilazione dopo aver esaminato l'anteprima
+.\build\Release\natc.exe .\examples\gguf_free_form_italiano.nat --llm-all --show-normalized -o .\ai_demo.exe --compiler cl
+.\ai_demo.exe
+```
+
+La differenza tra le modalità è importante:
+
+| Flag | Comportamento |
+| --- | --- |
+| Nessun flag LLM | Solo parser deterministico, nessun modello richiesto |
+| `--llm` | Chiama il modello **solo se** il parser fallisce |
+| `--llm-all` | Passa **sempre** dal modello, anche su programmi già validi |
+| `--llm-preview` | Normalizza e mostra programma + IR **senza generare o eseguire un EXE** |
+| `--show-normalized` | Visualizza la traduzione generata quando differisce dalla sorgente |
+| `--llm-profile qwen3` | Profilo del prompt per modelli piccoli (predefinito) |
+
+**GGUF già sul disco:** usa `-GGUFPath "C:\percorso\modello.gguf"` con `start_gguf.ps1` al posto di `-Model qwen3`. Per una porta diversa aggiungi `-Port 8081` e indica a `natc` `--llm-url http://127.0.0.1:8081/v1/chat/completions`.
+
+**Limite reale:** l'integrazione del protocollo è testata con un server simulato; non sono ancora confermati accuratezza o prestazioni effettive di Qwen3 sui 59 casi di benchmark. Il modello non è stato addestrato appositamente per NatLang e può produrre interpretazioni errate anche quando compilabili.
+
+### 9. Facoltativo: Python, test e benchmark del modello
+
+Installa **Python 3** da [python.org](https://www.python.org/downloads/) (o dal package manager), riapri il terminale e verifica `python --version`. Dalla cartella `natlang`:
+
+```powershell
+# Test automatici (il compilatore deve già essere stato costruito)
+$env:NATC = (Resolve-Path .\build\Release\natc.exe).Path
+python -m unittest discover -s tests -v
+
+# Benchmark senza AI: riferimento deterministico
+python .\benchmarks\evaluate.py --natc .\build\Release\natc.exe --mode deterministic --report baseline.json
+
+# Benchmark con Qwen3 (richiede server del punto 8, attivo nel terminale 1)
+python .\benchmarks\evaluate.py --natc .\build\Release\natc.exe --mode gguf --model-label Qwen3-0.6B-Q4_K_M --report qwen3-results.json
+```
+
+Il benchmark confronta l'IR con esempi di riferimento: non dimostra da solo che due programmi abbiano esattamente lo stesso comportamento. [Dettagli e limiti della valutazione](docs/GGUF_EVALUATION.md).
+
+### 10. Linux e macOS: percorso essenziale da zero
+
+**Ubuntu / Debian:** installa la toolchain e scarica il codice:
+
+```bash
+sudo apt update
+sudo apt install -y git cmake g++ curl python3
+git clone https://github.com/gabrieleviolait/natlang.git
+cd natlang
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/natc --help
+./build/natc --eval '2 plus 2' --opt-level 0
+./build/natc examples/hello.nat -o hello --compiler g++ --opt-level 0
+./hello
+```
+
+**macOS:** installa gli strumenti Apple (`xcode-select --install`), poi [Homebrew](https://brew.sh/) se non è già presente. Con Homebrew installa `cmake` e `git` (`brew install cmake git`) e usa gli stessi comandi Git/CMake del blocco Linux. `natc` usa Clang se disponibile; puoi selezionarlo esplicitamente con `--compiler clang++`. L'eseguibile risulterà normalmente in `./build/natc`.
+
+Per l'AI su macOS, **`brew install llama.cpp`**; per Linux consulta le [modalità di installazione di llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/docs/install.md). Dopo aver installato `llama-server`, dalla cartella `natlang`:
+
+```bash
+bash ./scripts/start_gguf.sh qwen3
+# In un secondo terminale, nella cartella natlang:
+./build/natc examples/gguf_free_form_italiano.nat --llm-preview
+```
+
+### 11. Risoluzione dei problemi più frequenti
+
+| Problema | Come risolvere |
+| --- | --- |
+| `cmake` o `git` non riconosciuto | Chiudi/riapri il terminale; verifica installazione e `PATH` |
+| `cl` non riconosciuto | Apri **Developer PowerShell for VS 2022**, verifica il workload **Desktop development with C++** |
+| `CMakeLists.txt` non trovato | Fai `cd` nella cartella principale del repository |
+| `natc.exe` non trovato | Compila prima; verifica se è in `build\Release\natc.exe` oppure `build\natc.exe` |
+| `C++ compilation failed` | Il compilatore C++ deve essere richiamabile anche quando `natc` compila il `.nat`; riprova con `--compiler cl` nel Developer PowerShell |
+| `Unknown variable`, errore alla riga N, `Missing END` | Controlla nomi, virgolette e blocchi `Fine`/`End`; usa `--check --explain` |
+| `llama-server` non trovato | Installa `llama.cpp`, riapri PowerShell e verifica il `PATH` |
+| `Local llama-server request failed` | Verifica che il **primo terminale** sia ancora aperto, che il modello sia caricato, `curl` sia installato e porta/URL coincidano |
+| Traduzione AI sbagliata ma compilabile | Usa `--llm-preview` e correggi il testo: il modello **non** garantisce equivalenza semantica |
+| `Scan network` non vede dispositivi | Il ping ICMP può essere filtrato da firewall/rete: assenza di risposta **non** significa host spento |
+
+**Sicurezza:** non eseguire programmi ricevuti da sconosciuti con privilegi elevati. NatLang non è una sandbox. Usa `Scan network` e `Scan IP` soltanto su sistemi autorizzati. Con un LLM locale, verifica sempre l'anteprima prima di compilare operazioni su file o rete.
+
+**Link di partenza:** [repository](https://github.com/gabrieleviolait/natlang) · [esempi `.nat`](examples) · [linguaggio](docs/LANGUAGE_REFERENCE.md) · [integrazione GGUF](docs/GGUF_EVALUATION.md) · [problemi/segnalazioni](https://github.com/gabrieleviolait/natlang/issues).
+
+---
+
+## English quick start
+
+For the **full zero-to-first-program walkthrough**, see the numbered Italian guide above; the commands work as shown even if you do not speak Italian. On Windows, install Git, CMake and Visual Studio 2022 Build Tools with the **Desktop development with C++** workload; open **Developer PowerShell for VS 2022**:
+
+```powershell
+git clone https://github.com/gabrieleviolait/natlang.git
+cd natlang
+cmake -S . -B build
+cmake --build build --config Release
+.\build\Release\natc.exe --eval "2 plus 2"
+.\build\Release\natc.exe .\examples\hello.nat -o .\hello.exe --compiler cl
+.\hello.exe
+```
+
+The LLM is **optional**. On Windows, install `llama.cpp` and run `.\scripts\start_gguf.ps1 -Model qwen3` in one PowerShell terminal; in another, from the repository root, run `.\build\Release\natc.exe .\examples\gguf_free_form_italiano.nat --llm-preview`. For Linux/macOS, see section 10 above. The rest of this README provides syntax, architecture and reference details in English.
+
+---
+
 ## Try it
 
 ```text
