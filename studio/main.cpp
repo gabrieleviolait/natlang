@@ -110,13 +110,15 @@ void startWork(int id){
  if(!fs::exists(natc())){MessageBoxW(window,L"natc.exe non trovato accanto a NatLang Studio. Usa il pacchetto Easy completo.",L"NatLang",MB_ICONERROR);return;}
  SetWindowTextW(logBox,L"");setBusy(true);
  const std::wstring src=filePath,output=destination(),comp=compilerPath;
- std::thread([id,src,output,comp](){
+ std::thread([id,src,output](){
   std::vector<std::wstring> args{src};
   bool requiresToolchain=(id==BUILD||id==RUN);
   if(id==CHECK)args.push_back(L"--check");
   if(id==PREVIEW)args.push_back(L"--llm-preview");
   if(requiresToolchain){args.insert(args.end(),{L"-o",output,L"--opt-level",L"0"});
-   if(!comp.empty())args.insert(args.end(),{L"--compiler",comp});
+   // Prefer the bundled portable toolchain through PATH (configured on startup).
+   // This also avoids Windows cmd.exe quoting problems for a compiler under
+   // Program Files / any other path with spaces.
   }
   postOutput(L"> natc "+src+L"\r\n");
   ProcResult res=execute(natc(),args,false);
