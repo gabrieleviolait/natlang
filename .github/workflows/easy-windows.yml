@@ -1,0 +1,114 @@
+name: NatLang Studio Easy — Windows bundle and installer
+on:
+  workflow_dispatch:
+    inputs:
+      include_model:
+        description: 'Also bundle Qwen3 0.6B Q4_K_M GGUF for fully offline AI'
+        type: boolean
+        default: false
+      publish_release:
+        description: 'Publish a public GitHub Release v0.5.0 (requires repository Actions write permission)'
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'studio/**'
+      - 'dist/**'
+      - 'scripts/start_gguf.ps1'
+      - '.github/workflows/easy-windows.yml'
+      - 'CMakeLists.txt'
+permissions:
+  contents: write
+jobs:
+  portable:
+    name: Build self-contained Windows package
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile compiler and Studio (Windows x64)
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+          cmake --build build --config Release --parallel
+          if (!(Test-Path build/Release/natc.exe) -or !(Test-Path build/Release/natlang-studio.exe)) { throw 'Build incomplete' }
+      - name: Check native compiler with Windows build environment
+        uses: ilammy/msvc-dev-cmd@v1
+      - name: Smoke test NatLang before packaging
+        shell: pwsh
+        run: |
+          .\build\Release\natc.exe examples\hello.nat --check
+          .\build\Release\natc.exe examples\calculator.nat -o "$env:RUNNER_TEMP\calculator.exe" --compiler cl --opt-level 0
+          if (!(Test-Path "$env:RUNNER_TEMP\calculator.exe")) { throw 'Generated native executable missing' }
+      - name: Assemble application payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/payload,dist/payload/scripts,dist/payload/ai/bin,dist/payload/ai/models | Out-Null
+          Copy-Item build/Release/natc.exe,build/Release/natlang-studio.exe dist/payload/
+          Copy-Item -Recurse docs,examples,LICENSE,CHANGELOG.md dist/payload/
+          Copy-Item scripts/start_gguf.ps1 dist/payload/scripts/
+          Copy-Item dist/EASY_START.md dist/payload/docs/EASY_START.md
+      - name: Include portable C++ toolchain (llvm-mingw UCRT 20260922)
+        shell: pwsh
+        run: |
+          $uri = 'https://github.com/mstorsjo/llvm-mingw/releases/download/20260922/llvm-mingw-20260922-ucrt-x86_64.zip'
+          Invoke-WebRequest -Uri $uri -OutFile "$env:RUNNER_TEMP\llvm-mingw.zip" -MaximumRedirection 5
+          Expand-Archive "$env:RUNNER_TEMP\llvm-mingw.zip" -DestinationPath "$env:RUNNER_TEMP\llvm-mingw" -Force
+          $clang = Get-ChildItem "$env:RUNNER_TEMP\llvm-mingw" -Filter clang++.exe -Recurse | Select-Object -First 1
+          if (!$clang) { throw 'llvm-mingw release layout changed: clang++.exe not found' }
+          Copy-Item (Split-Path $clang.DirectoryName -Parent) dist/payload/toolchain -Recurse
+          if (!(Test-Path dist/payload/toolchain/bin/clang++.exe)) { throw 'Toolchain missing clang++.exe' }
+      - name: Include local llama.cpp CPU runtime
+        shell: pwsh
+        run: |
+          $r = Invoke-RestMethod 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest' -Headers @{ 'User-Agent'='NatLang-studio-builder' }
+          $asset = $r.assets | Where-Object { $_.name -match '^llama-.*-bin-win-cpu-x64\.zip$' } | Select-Object -First 1
+          if (!$asset) { throw 'No compatible llama.cpp Windows CPU release; packaging aborted' }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile "$env:RUNNER_TEMP\llama-cpu.zip" -MaximumRedirection 5
+          Expand-Archive "$env:RUNNER_TEMP\llama-cpu.zip" -DestinationPath "$env:RUNNER_TEMP\llama-cpu" -Force
+          $server = Get-ChildItem "$env:RUNNER_TEMP\llama-cpu" -Filter llama-server.exe -Recurse | Select-Object -First 1
+          if (!$server) { throw 'llama-server.exe not found in llama.cpp release' }
+          Copy-Item "$($server.DirectoryName)\*" dist/payload/ai/bin/ -Recurse -Force
+          if (!(Test-Path dist/payload/ai/bin/llama-server.exe)) { throw 'llama-server.exe is missing' }
+          "llama.cpp binary release: $($r.tag_name) / $($asset.name)" | Set-Content dist/payload/ai/runtime-version.txt
+          New-Item -ItemType Directory -Force dist/payload/ai/licenses | Out-Null
+          Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/ggml-org/llama.cpp/master/LICENSE' -OutFile dist/payload/ai/licenses/llama.cpp-LICENSE-MIT.txt
+      - name: Download offline GGUF model (optional)
+        if: ${{ inputs.include_model == true }}
+        shell: pwsh
+        run: |
+          $target = 'dist/payload/ai/models/Qwen3-0.6B-Q4_K_M.gguf'
+          $url = 'https://huggingface.co/tensorblock/Qwen_Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf?download=true'
+          Invoke-WebRequest -Uri $url -OutFile $target -MaximumRedirection 8
+          $info = Get-Item $target
+          $stream = [IO.File]::OpenRead($info.FullName)
+          try { $magic = New-Object byte[] 4; $count = $stream.Read($magic,0,4) } finally { $stream.Dispose() }
+          if ($info.Length -lt 300000000 -or $count -ne 4 -or [Text.Encoding]::ASCII.GetString($magic) -ne 'GGUF') { throw 'Invalid GGUF file' }
+      - name: Package portable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path 'dist/payload/*' -DestinationPath 'dist/NatLang-Studio-Easy-Windows-x64.zip' -CompressionLevel Optimal
+      - name: Build single-file Windows installer
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress --yes
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (!(Test-Path $iscc)) { throw 'Inno Setup compiler not found' }
+          & $iscc dist/NatLang.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup failed' }
+      - name: Upload downloadable ZIP and installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NatLang-Studio-Easy-Windows-x64
+          path: |
+            dist/NatLang-Studio-Easy-Windows-x64.zip
+            dist/out/NatLang-Studio-Easy-Setup.exe
+          retention-days: 30
+      - name: Publish release for easy downloads (manual option)
+        if: ${{ inputs.publish_release == true }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create v0.5.0 --target $env:GITHUB_SHA --title 'NatLang Studio Easy v0.5.0' --notes 'Experimental Windows x64 GUI bundle. Local compiler and llama.cpp included. GGUF included only in Full mode; otherwise downloaded at first AI start. See docs/EASY_START.md and third-party licenses.' dist/NatLang-Studio-Easy-Windows-x64.zip dist/out/NatLang-Studio-Easy-Setup.exe

@@ -8,6 +8,15 @@
 
 # Changelog
 
+## v0.5.0 — NatLang Studio Easy (2026-10-08)
+
+- Added dependency-free Windows Win32 editor (open/save, check/build/run, stdin input, stop, LLM preview and AI launch).
+- Added a GitHub Actions packaging workflow for Windows x64 portable ZIP and one-file Inno Setup installer. Package contains NatLang compiler, llvm-mingw toolchain, llama.cpp CPU runtime and examples.
+- Added optional Full package mode with local Qwen3 GGUF model; the standard mode downloads model weights on first AI launch.
+- Added Studio documentation, license notices and distribution checks.
+- Important: distribution job must complete successfully before Windows packages can be considered tested or downloadable.
+
+
 ## v0.3.0 — Multilingual and mathematical language (2026-10-08)
 
 - Expanded the same C++20 compiler frontend with richer **Italian and English** constructs, comparisons, list/file statements and math expressions.
