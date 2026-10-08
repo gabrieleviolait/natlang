@@ -1,0 +1,15 @@
+# A real program mixing Italian and English
+Imposta valore a 3
+Se valore è maggiore di 2
+    Mostra "Condizione vera"
+Altrimenti
+    Mostra "Condizione falsa"
+Fine
+Ripeti 2 volte
+    Increase valore by 1
+Fine
+Show valore
+Funzione doppio(x)
+    Restituisci x * 2
+Fine
+Mostra doppio(valore)

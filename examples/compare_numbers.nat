@@ -1,0 +1,13 @@
+# Example: basic mathematical functions and choices
+Define a function called larger with parameter a, b
+    If a is greater than b
+        Return a
+    Otherwise
+        Return b
+    End
+End
+
+Ask for a number and store it in first
+Ask for a number and store it in second
+Set largest to larger(first, second)
+Show "Largest: " + largest

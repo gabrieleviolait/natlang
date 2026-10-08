@@ -1,0 +1,4 @@
+# The easiest program
+Show "Hello from NatLang!"
+Set user to "World"
+Show "Hello, " + user
