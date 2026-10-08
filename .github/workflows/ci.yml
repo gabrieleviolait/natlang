@@ -23,6 +23,8 @@ jobs:
         run: |
           ./build/natc examples/countdown.nat -o countdown --compiler g++
           test "$(./countdown)" = "$(printf '5\n4\n3\n2\n1\nDone!')"
+          test "$(./build/natc --eval '2 plus 2')" = '4'
+          ./build/natc examples/network_discovery.nat --check
 
   windows:
     name: Windows / MSVC

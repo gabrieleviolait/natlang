@@ -34,13 +34,13 @@ static string cppQuote(const string &s) {
     for(unsigned char c:s) {switch(c){case '\\':o+="\\\\";break;case '"':o+="\\\"";break;case '\n':o+="\\n";break;case '\t':o+="\\t";break;case '\r':o+="\\r";break;default:if(c<32){char b[7];std::snprintf(b,sizeof(b),"\\u%04x",c);o+=b;}else o+=static_cast<char>(c);}}
     return o+"\"";
 }
-enum class K {Assign,Print,Ask,AskMany,If,Until,While,Times,Function,Return,Append,Save,Break,Continue};
+enum class K {Assign,Print,Ask,AskMany,If,Until,While,Times,Function,Return,Append,Save,Break,Continue,ScanHost,ScanNetwork};
 struct Node {
     K kind{}; int line=0; string a,b,c;
     std::vector<string> params;std::vector<Node> body,otherwise;
 };
 static string kindName(K k) {
-    switch(k){case K::Assign:return "assign";case K::Print:return "print";case K::Ask:return "input";case K::AskMany:return "input-list";case K::If:return "if";case K::Until:return "repeat-until";case K::While:return "while";case K::Times:return "repeat-times";case K::Function:return "function";case K::Return:return "return";case K::Append:return "append";case K::Save:return "save-file";case K::Break:return "break";case K::Continue:return "continue";}
+    switch(k){case K::Assign:return "assign";case K::Print:return "print";case K::Ask:return "input";case K::AskMany:return "input-list";case K::If:return "if";case K::Until:return "repeat-until";case K::While:return "while";case K::Times:return "repeat-times";case K::Function:return "function";case K::Return:return "return";case K::Append:return "append";case K::Save:return "save-file";case K::Break:return "break";case K::Continue:return "continue";case K::ScanHost:return "scan-ip";case K::ScanNetwork:return "scan-network";}
     return "unknown";
 }
 struct Line{int num;string s;};
@@ -92,14 +92,33 @@ struct Parser {
             else if(match(s,R"((?:decrease|decrement) ([A-Za-z_]\w*) by (.+))",m)) {n.kind=K::Assign;n.a=m[1];n.b=n.a+" - ("+trim(m[2])+")";}
             else if(match(s,R"((?:add|append|put) (.+) (?:to|into) ([A-Za-z_]\w*))",m)) {n.kind=K::Append;n.a=m[2];n.b=trim(m[1]);}
             else if(match(s,R"(ask (?:the user )?for (?:a |an )?(number|text|string)(?: and)? (?:store (?:it )?(?:in|as)|called|named) ([A-Za-z_]\w*))",m)) {n.kind=K::Ask;n.a=m[2];n.b=lower(m[1]);}
+            else if(match(s,R"(ask (?:the )?user(?: for (?:a |an )?(number|text|string))?(?: and (?:store (?:it )?(?:in|as)|save (?:it )?as) ([A-Za-z_]\w*))?)",m)) {
+                n.kind=K::Ask;n.a=m[2].matched?string(m[2]):"answer";n.b=lower(m[1].matched?string(m[1]):"text");n.c=n.b=="number"?"Number: ":"Input: ";
+            }
+            else if(match(s,R"(chiedi (?:all['’]utente|ad? (?:un )?utente)(?: (?:un |una )?(numero|testo|text|string))?(?: (?:e )?(?:salva(?:lo)?|memorizza(?:lo)?|metti) (?:in|come) ([A-Za-z_]\w*))?)",m)) {
+                n.kind=K::Ask;n.a=m[2].matched?string(m[2]):"answer";n.b=lower(m[1].matched?string(m[1]):"text");n.c=n.b=="numero"?"Numero: ":"Inserisci un valore: ";if(n.b=="numero")n.b="number";
+            }
+            else if(match(s,R"(ask (?:the )?user ("[^"]*"|'[^']*')(?: and (?:store (?:it )?in|save (?:it )?as) ([A-Za-z_]\w*))?)",m)) {
+                n.kind=K::Ask;n.a=m[2].matched?string(m[2]):"answer";n.b="text";n.c=string(m[1]);
+            }
+            else if(match(s,R"(chiedi (?:all['’]utente|ad? (?:un )?utente) ("[^"]*"|'[^']*')(?: e (?:salva(?:lo)?|memorizza(?:lo)?) (?:in|come) ([A-Za-z_]\w*))?)",m)) {
+                n.kind=K::Ask;n.a=m[2].matched?string(m[2]):"answer";n.b="text";n.c=string(m[1]);
+            }
             else if(match(s,R"(ask (?:the user )?for (.+) numbers?(?: and)? store them in ([A-Za-z_]\w*))",m)) {n.kind=K::AskMany;n.a=m[2];n.b=trim(m[1]);}
-            else if(match(s,R"((?:show|print|display|output|say) (.+))",m)) {n.kind=K::Print;n.a=trim(m[1]);}
+            else if(match(s,R"((?:show|print|display|output|say|mostra|stampa) (.+))",m)) {n.kind=K::Print;n.a=trim(m[1]);}
+            else if(match(s,R"(scan (?:the |my )?(?:local )?network|scan (?:la )?rete(?: locale)?)",m)) {n.kind=K::ScanNetwork;}
+            else if(match(s,R"((?:scan|ping|scansiona) (?:(?:this|the|questo) )?(?:ip(?: address)?|host|indirizzo ip)(?: (.+))?)",m)) {
+                n.kind=K::ScanHost;n.a=trim(m[1]);
+            }
+            else if(match(s,R"((?:scan|ping|scansiona) ([0-9]+(?:\.[0-9]+){3}))",m)) {n.kind=K::ScanHost;n.a=trim(m[1]);}
             else if(match(s,R"(return (.+))",m)) {n.kind=K::Return;n.a=trim(m[1]);if(!inFunction)throw Error("Line "+std::to_string(line.num)+": RETURN outside function");}
             else if(match(s,R"(save (.+) to (?:a )?file (.+))",m)) {n.kind=K::Save;n.a=trim(m[1]);n.b=trim(m[2]);}
             else if(match(s,R"(load file (.+) (?:into|as) ([A-Za-z_]\w*))",m)) {n.kind=K::Assign;n.a=m[2];n.b="read_file("+trim(m[1])+")";}
             else if(match(s,R"(break|stop the loop)",m)) {n.kind=K::Break;if(!loopDepth)throw Error("Line "+std::to_string(line.num)+": BREAK outside loop");}
             else if(match(s,R"(continue|skip to next iteration)",m)) {n.kind=K::Continue;if(!loopDepth)throw Error("Line "+std::to_string(line.num)+": CONTINUE outside loop");}
-            else throw Error("Line "+std::to_string(line.num)+": cannot understand: "+s);
+            else { // A bare expression is a statement whose result is printed, e.g. "2 plus 2".
+                n.kind=K::Print;n.a=s;
+            }
             if(n.kind==K::Assign||n.kind==K::Append||n.kind==K::Ask||n.kind==K::AskMany||n.kind==K::Function)validId(n.a,n.line);
             out.push_back(std::move(n));
         }
@@ -116,13 +135,15 @@ static string normalizeOutsideQuotes(const string &s) {
             {R"(\b(?:is )?(?:less|lower|smaller) than\b)","<"},
             {R"(\b(?:is equal to|equals|is)\b)","=="},
             {R"(\bmultiplied by\b)","*"},{R"(\bdivided by\b)","/"},
-            {R"(\bplus\b)","+"},{R"(\bminus\b)","-"},
+            {R"(\b(?:plus|piu|più)\b)","+"},{R"(\b(?:minus|meno)\b)","-"},
             {R"(\bthe (?:highest|largest|biggest|maximum) (?:number|value) in ([A-Za-z_]\w*)\b)","max($1)"},
             {R"(\bthe (?:smallest|lowest|minimum) (?:number|value) in ([A-Za-z_]\w*)\b)","min($1)"},
             {R"(\bthe average of ([A-Za-z_]\w*)\b)","average($1)"},
             {R"(\bthe sum of ([A-Za-z_]\w*)\b)","sum($1)"},
             {R"(\bthe length of ([A-Za-z_]\w*)\b)","length($1)"}
         };
+        // UTF-8 accented Italian operators need explicit boundaries (regex \b is ASCII word-based).
+        z=std::regex_replace(z,std::regex(R"(\bpiù(?=\s|$|[),]))"),"+");
         // Replace long phrases before individual operators, and quantifiers before plain words.
         for(size_t i=0;i<6;++i)z=std::regex_replace(z,std::regex(rules[i].first,std::regex::icase),rules[i].second);
         for(size_t i=10;i<rules.size();++i)z=std::regex_replace(z,std::regex(rules[i].first,std::regex::icase),rules[i].second);
@@ -187,7 +208,7 @@ struct Expr {
             else if(eat(T::LParen)) {
                 std::vector<string> args;
                 if(!eat(T::RParen)){do{args.push_back(expr());}while(eat(T::Comma));expect(T::RParen);}
-                const std::map<string,std::pair<string,size_t>> builtins={{"sum",{"nat::sum",1}},{"average",{"nat::average",1}},{"avg",{"nat::average",1}},{"max",{"nat::maximum",1}},{"min",{"nat::minimum",1}},{"length",{"nat::length",1}},{"read_file",{"nat::read_file",1}}};
+                const std::map<string,std::pair<string,size_t>> builtins={{"sum",{"nat::sum",1}},{"average",{"nat::average",1}},{"avg",{"nat::average",1}},{"max",{"nat::maximum",1}},{"min",{"nat::minimum",1}},{"length",{"nat::length",1}},{"read_file",{"nat::read_file",1}},{"ping",{"nat::ping",1}}};
                 string callee;
                 if(auto it=builtins.find(low);it!=builtins.end()) {if(args.size()!=it->second.second)throw Error("Line "+std::to_string(line)+": wrong argument count for "+t.text);callee=it->second.first;}
                 else if(auto it=funcs.find(t.text);it!=funcs.end()){if(args.size()!=it->second)throw Error("Line "+std::to_string(line)+": wrong argument count for "+t.text);callee="fn_"+t.text;}
@@ -228,7 +249,13 @@ struct Emit {
             switch(n.kind) {
                 case K::Function:throw Error("Nested function not allowed");
                 case K::Assign:out+=p+"v_"+n.a+" = "+expression(n.b,n.line,vars)+";\n";break;
-                case K::Ask:out+=p+"v_"+n.a+" = nat::"+(n.b=="number"?"read_number":"read_text")+"();\n";break;
+                case K::Ask:
+                    if(n.c.empty())out+=p+"v_"+n.a+" = nat::"+(n.b=="number"?"read_number":"read_text")+"();\n";
+                    else {
+                        const string prompt=(n.c.front()=='\''||n.c.front()=='"')?expression(n.c,n.line,vars):"nat::Value("+cppQuote(n.c)+")";
+                        out+=p+"v_"+n.a+" = nat::"+(n.b=="number"?"ask_number":"ask_text")+"("+prompt+");\n";
+                    }
+                    break;
                 case K::AskMany:out+=p+"v_"+n.a+" = nat::read_numbers("+expression(n.b,n.line,vars)+");\n";break;
                 case K::Append:if(!vars.count(n.a))throw Error("Line "+std::to_string(n.line)+": unknown list "+n.a);out+=p+"nat::append(v_"+n.a+","+expression(n.b,n.line,vars)+");\n";break;
                 case K::Print:out+=p+"nat::print("+expression(n.a,n.line,vars)+");\n";break;
@@ -236,6 +263,13 @@ struct Emit {
                 case K::Return:out+=p+"return "+expression(n.a,n.line,vars)+";\n";break;
                 case K::Break:out+=p+"break;\n";break;
                 case K::Continue:out+=p+"continue;\n";break;
+                case K::ScanNetwork:out+=p+"nat::scan_network();\n";break;
+                case K::ScanHost: {
+                    const string target=n.a.empty()?"nat::ask_text(nat::Value(\"IP to scan: \"))":
+                      std::regex_match(n.a,std::regex(R"([0-9]+(?:\.[0-9]+){3})"))?"nat::Value("+cppQuote(n.a)+")":expression(n.a,n.line,vars);
+                    out+=p+"nat::scan_ip("+target+");\n";
+                    break;
+                }
                 case K::If:
                     out+=p+"if (nat::truth("+expression(n.a,n.line,vars)+")) {\n";
                     out+=statements(n.body,vars,indent+1)+p+"}";
@@ -252,7 +286,7 @@ struct Emit {
         return out;
     }
     string generate() {
-        string out="// NatLang 0.1 | Generated C++20. Review generated code before distributing.\n";
+        string out="// NatLang 0.2 | Generated C++20. Review generated code before distributing.\n";
         out+=NAT_RUNTIME;out+="\n";
         for(const auto &n:program)if(n.kind==K::Function){out+="nat::Value fn_"+n.a+"(";for(size_t i=0;i<n.params.size();++i){if(i)out+=",";out+="nat::Value v_"+n.params[i];}out+=");\n";}
         for(const auto &n:program)if(n.kind==K::Function) {
@@ -305,9 +339,16 @@ static string shellQuote(const string &s) {
 }
 static string llm(const string &source,const string &url) {
     if(!std::regex_match(url,std::regex(R"(http://(?:127\.0\.0\.1|localhost):[0-9]{2,5}/v1/chat/completions)")))throw Error("--llm-url must be a localhost llama-server /v1/chat/completions endpoint");
-    const string rules=R"(Translate English natural-language program into NatLang v0.1. Reply ONLY JSON with key program. Never guess missing information. NatLang line format:
+    const string rules=R"(Translate English/Italian natural-language program into NatLang v0.2. Reply ONLY JSON with key program. Never guess missing information. NatLang line format:
 Set x to EXPR
 Show EXPR
+EXPR (bare expressions are printed)
+Ask user
+Ask user "Your name?" and store in name
+Chiedi all'utente un numero e salva in x
+Scan network
+Scan IP 192.168.1.1
+Scan this ip
 Ask for a number and store it in x
 Ask for text and store it in x
 Ask for N numbers and store them in listname
@@ -344,24 +385,26 @@ static void explain(const std::vector<Node> &nodes,int depth=0) {
     }
 }
 static void help() {
-    std::cout<<"NatLang compiler v0.1 (C++20)\n"
+    std::cout<<"NatLang compiler v0.2 (C++20)\n"
     <<"  natc source.nat [-o output] [--compiler clang++|g++|cl]\n"
     <<"  natc source.nat --emit-cpp [generated.cpp]\n"
     <<"  natc source.nat --check [--explain]\n"
     <<"  natc source.nat --llm [--llm-url http://127.0.0.1:8080/v1/chat/completions]\n"
     <<"  natc source.nat --llm-all  (always normalize using local model)\n"
+    <<"  natc --eval \"2 plus 2\"  (compile and execute an expression immediately)\n"
     <<"Flags: --keep-cpp (retain generated source), --show-normalized, --help\n";
 }
 int main(int argc,char **argv) {
     try {
         if(argc<2){help();return 1;}
-        fs::path source,output,cpp;string compiler="",url="http://127.0.0.1:8080/v1/chat/completions";
-        bool emit=false,check=false,exp=false,useLLM=false,forceLLM=false,keep=false,showNormalized=false;
+        fs::path source,output,cpp;string compiler="",url="http://127.0.0.1:8080/v1/chat/completions",evalCode;
+        bool emit=false,check=false,exp=false,useLLM=false,forceLLM=false,keep=false,showNormalized=false,eval=false;
         for(int i=1;i<argc;++i) {
             string a=argv[i];if(a=="--help"||a=="-h"){help();return 0;}
             else if(a=="-o"){if(++i==argc)throw Error("-o requires output path");output=argv[i];}
             else if(a=="--compiler"){if(++i==argc)throw Error("--compiler requires compiler name");compiler=argv[i];}
             else if(a=="--llm-url"){if(++i==argc)throw Error("--llm-url requires URL");url=argv[i];}
+            else if(a=="--eval"||a=="-e"){if(++i==argc)throw Error("--eval requires a NatLang expression");evalCode=argv[i];eval=true;}
             else if(a=="--llm"){useLLM=true;}
             else if(a=="--llm-all"){useLLM=true;forceLLM=true;}
             else if(a=="--keep-cpp"){keep=true;}
@@ -373,7 +416,17 @@ int main(int argc,char **argv) {
             else if(source.empty())source=a;
             else throw Error("Unexpected argument: "+a);
         }
-        if(source.empty())throw Error("Missing source file");
+        if(eval && !source.empty())throw Error("--eval cannot be combined with a source file");
+        if(eval && (!output.empty() || emit || keep || !cpp.empty()))throw Error("--eval cannot be combined with -o, --emit-cpp or --keep-cpp");
+        if(!eval && source.empty())throw Error("Missing source file");
+        if(eval) {
+            source=fs::temp_directory_path()/("natc-eval-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count())+".nat");
+            write(source,evalCode);
+        }
+        struct EvalCleanup {
+            bool active;fs::path source;
+            ~EvalCleanup(){if(!active)return;std::error_code ec;fs::remove(source,ec);auto cpp=source;cpp.replace_extension(".generated.cpp");fs::remove(cpp,ec);}
+        } evalCleanup{eval,source};
         const string original=read(source);string program=original;
         std::vector<Node> ast;string generated;
         auto compile=[&]() {Parser p(program);ast=p.seq();generated=Emit(ast).generate();};
@@ -402,12 +455,24 @@ int main(int argc,char **argv) {
         }
         string cmd;
         const auto base=lower(fs::path(compiler).filename().string());
-        if(base=="cl"||base=="cl.exe")cmd=shellQuote(compiler)+" /nologo /std:c++20 /EHsc /Fe:"+shellQuote(output.string())+" "+shellQuote(cpp.string());
-        else cmd=shellQuote(compiler)+" -std=c++20 -O2 "+shellQuote(cpp.string())+" -o "+shellQuote(output.string());
-        std::cout<<"Native compilation: "<<compiler<<"\n"<<std::flush;
+        if(base=="cl"||base=="cl.exe")cmd=shellQuote(compiler)+" /nologo /std:c++20 /utf-8 /EHsc /Fe:"+shellQuote(output.string())+" "+shellQuote(cpp.string());
+        else {
+            cmd=shellQuote(compiler)+" -std=c++20 -O2 "+shellQuote(cpp.string())+" -o "+shellQuote(output.string());
+#ifdef _WIN32
+            cmd+=" -liphlpapi -lws2_32";
+#else
+            cmd+=" -pthread";
+#endif
+        }
+        if(!eval)std::cout<<"Native compilation: "<<compiler<<"\n"<<std::flush;
         const int rc=std::system(cmd.c_str());
         if(rc!=0)throw Error("C++ compilation failed; generated file retained at "+cpp.string());
         if(!keep){std::error_code ec;fs::remove(cpp,ec);}
+        if(eval) {
+            const int status=std::system(shellQuote(output.string()).c_str());
+            std::error_code ec;fs::remove(output,ec);
+            return status==0?0:1;
+        }
         std::cout<<"Built "<<output.string()<<"\n";
         return 0;
     } catch(const std::exception &e){std::cerr<<"natc error: "<<e.what()<<"\n";return 1;}

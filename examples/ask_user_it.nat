@@ -1,0 +1,5 @@
+# Italian/English interactive inputs.
+Ask user "What is your name? " and store in name
+Show "Ciao " + name
+Chiedi all'utente un numero e salva in numero
+Mostra numero + 2

@@ -34,6 +34,19 @@ La caratteristica distintiva da perseguire è l'insieme di queste proprietà: le
 
 ## Stato attuale
 
-È disponibile un **MVP sperimentale funzionante**, non un linguaggio universale privo di sintassi. Implementa variabili dinamiche, condizioni, cicli, funzioni, liste, input/output e file. Non include ancora GUI, networking, librerie esterne, classi o un LLM addestrato per NatLang.
+È disponibile un **MVP sperimentale funzionante**, non un linguaggio universale privo di sintassi. Implementa variabili dinamiche, condizioni, cicli, funzioni, liste, input/output, file e una prima funzione di discovery LAN via ping. Non include ancora GUI, networking generale, librerie esterne, classi o un LLM addestrato per NatLang.
+
+La v0.2 amplia il linguaggio deterministico:
+
+```text
+2 + 2
+2 plus 2
+Chiedi all'utente un numero e salva in eta
+Mostra eta + 1
+Scan IP 192.168.1.1
+Scan network
+```
+
+`natc --eval "2 plus 2"` produce direttamente `4`. La scansione IP usa ping senza privilegi speciali richiesti dal programma, ma il sistema operativo può limitarlo; l'assenza di risposta ICMP non significa necessariamente host spento. `Scan network` si limita ad alcune sottoreti LAN IPv4 private, con un limite esplicito al numero di host.
 
 Per le istruzioni operative consultare il [README](../README.md), per ciò che il compilatore comprende davvero la [Language Reference](LANGUAGE_REFERENCE.md), per l'architettura [Architecture](ARCHITECTURE.md) e per la direzione futura [Vision](VISION.md).

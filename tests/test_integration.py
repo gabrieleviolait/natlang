@@ -27,6 +27,64 @@ class CompilationTests(unittest.TestCase):
             result = call(exe, input_text=stdin)
             return result
 
+    def test_bare_expression_in_multiple_forms(self):
+        r = self.native('2 + 2\n2 plus 2\n2 piu 2\n2 più 2\n(3 * 5) - 1\n')
+        self.assertEqual((r.returncode, r.stdout), (0, '4\n4\n4\n4\n14\n'))
+
+    def test_eval_directly(self):
+        for expression in ('2 + 2', '2 plus 2', '2 piu 2'):
+            r = call(NATC, '--eval', expression)
+            self.assertEqual((r.returncode, r.stdout), (0, '4\n'), r.stderr)
+
+    def test_ask_user_and_reuse_answer(self):
+        r = self.native('Ask user\nShow "Hello " + answer\n', 'Ada\n')
+        self.assertEqual((r.returncode, r.stdout), (0, 'Input: Hello Ada\n'))
+
+    def test_ask_user_english_with_prompt(self):
+        r = self.native('Ask user "What is your name? " and store in name\nShow name\n', 'Maya\n')
+        self.assertEqual((r.returncode, r.stdout), (0, 'What is your name? Maya\n'))
+
+    def test_ask_user_italian_number_and_text(self):
+        r = self.native('Chiedi all\'utente un numero e salva in eta\nMostra eta + 1\nChiedi ad utente "Nome? " e salva in nome\nStampa nome\n', '20\nLuca\n')
+        self.assertEqual((r.returncode, r.stdout), (0, 'Numero: 21\nNome? Luca\n'))
+
+    def test_ping_expression_compiles_and_runs(self):
+        r=self.native('Show ping("127.0.0.1")\n')
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertIn(r.stdout,('true\n','false\n'))
+
+    def test_scan_ip_loopback_and_variable(self):
+        r = self.native('Scan IP 127.0.0.1\nSet target to "127.0.0.1"\nScan this ip target\n')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        # ICMP may be filtered or forbidden by sandbox / CI runner.
+        lines=r.stdout.splitlines()
+        self.assertEqual(len(lines),2)
+        for line in lines:
+            self.assertRegex(line, r'^127\.0\.0\.1: (responding|no ICMP response)$')
+
+    def test_scan_ip_prompts_when_missing(self):
+        r = self.native('Scan this ip\n', '127.0.0.1\n')
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertRegex(r.stdout, r'^IP to scan: 127\.0\.0\.1: (responding|no ICMP response)\n$')
+
+    def test_scan_network_compiles_without_running_discovery(self):
+        with tempfile.TemporaryDirectory() as d:
+            source=Path(d)/'discovery.nat';source.write_text('Scan network\n')
+            result=call(NATC,source,'--check','--explain')
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('scan-network',result.stdout)
+            generated=Path(d)/'discovery.cpp'
+            result=call(NATC,source,'--emit-cpp',generated)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertIn('nat::scan_network()',generated.read_text())
+
+    def test_scan_ip_rejects_invalid_or_command_injection(self):
+        for address in ('999.999.999.999', '127.0.0.1; echo BAD', 'localhost'):
+            r=self.native('Scan IP "' + address + '"\n')
+            self.assertNotEqual(r.returncode,0)
+            self.assertIn('Invalid IPv4 address',r.stderr)
+            self.assertNotIn('BAD\n',r.stdout)
+
     def test_hello(self):
         r = self.native('Show "Hello"\nSet x to 5\nShow x + 2\n')
         self.assertEqual((r.returncode, r.stdout), (0, "Hello\n7\n"))

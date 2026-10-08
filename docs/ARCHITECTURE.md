@@ -1,4 +1,4 @@
-# Architecture (v0.1 implementation)
+# Architecture (v0.2 implementation)
 
 NatLang is written in **C++20**. The host C++ compiler is an external build-time dependency; the generated application embeds a small C++ runtime. All current native code is produced through a C++ source generation backend rather than direct assembly or LLVM IR.
 
@@ -11,7 +11,7 @@ NatLang is written in **C++20**. The host C++ compiler is an external build-time
 | Expression frontend | `src/natc.cpp` (`lex`, `Expr`) | Tokenization, precedence parsing, check variable/function names and arity |
 | Structural AST | `src/natc.cpp` (`Node`) | Statements, arguments, child/else blocks and source line references |
 | C++ backend | `src/natc.cpp` (`Emit`) | Generate standalone translation unit with main, functions and expressions |
-| Runtime | `src/runtime.hpp` | Tagged dynamic values, arithmetic, lists, files, input/output |
+| Runtime | `src/runtime.hpp` | Tagged dynamic values, arithmetic, lists, files, input/output, validated IPv4 ICMP discovery |
 | Embedding step | `src/embedded_runtime.in.hpp` + `CMakeLists.txt` | Bake runtime header source into compiler at build time |
 | Optional local AI adapter | `src/natc.cpp` (`llm`) | Send a full program to loopback llama-server, parse constrained JSON reply |
 
@@ -37,6 +37,7 @@ The runtime `nat::Value` is a variant containing null/uninitialized, 64-bit floa
 - Function declarations are top-level, user functions have fixed parameter counts and return `Value`.
 - Compiler/tool commands currently use `std::system`; invoke this tool on trusted local paths and arguments only. Replace it with a platform-aware child process runner before treating inputs as untrusted.
 - The local AI adapter calls the local `curl` CLI and uses a small in-tree JSON-string extraction helper. A real JSON library and richer error handling are appropriate next steps.
+- `Scan IP`/`Scan network` use the OS `ping` executable with strictly validated numeric IPv4 addresses. Inference about host availability is limited to ICMP responses. `Scan network` uses a bounded private-LAN-only interface-discovery strategy and is not a full network scanner.
 - The emitted program is not sandboxed; code generated from untrusted or model-normalized source must be reviewed.
 
 ## Design proposal for v0.2+
