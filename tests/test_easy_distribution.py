@@ -17,7 +17,7 @@ class EasyDistribution(unittest.TestCase):
 
     def test_studio_compiler_and_ai_controls(self):
         app = (ROOT / "studio/main.cpp").read_text(encoding="utf-8")
-        for feature in ("--check", "--compiler", "--llm-preview", "--opt-level", "start_gguf.ps1", "TerminateProcess", "CreateProcessW", "CreatePipe", "WriteFile"):
+        for feature in ("--check", "clang++.exe", "--llm-preview", "--opt-level", "start_gguf.ps1", "TerminateProcess", "CreateProcessW", "CreatePipe", "WriteFile", "SetEnvironmentVariableW"):
             with self.subTest(feature=feature): self.assertIn(feature, app)
 
     def test_package_has_a_portable_compiler_and_model_choice(self):
