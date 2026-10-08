@@ -1,0 +1,8 @@
+Define a function called factorial with parameter n
+    If n is less than or equal to 1
+        Return 1
+    End
+    Return n * factorial(n - 1)
+End
+
+Show "5! = " + factorial(5)

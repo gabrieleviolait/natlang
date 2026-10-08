@@ -1,0 +1,16 @@
+build/
+*.generated.cpp
+*.exe
+*.obj
+*.o
+__pycache__/
+countdown
+results.txt
+.DS_Store
+.vs/
+.vscode/
+*.pdb
+*.ilk
+*.dll
+*.lib
+*.exp
